@@ -8,6 +8,8 @@
 const state = {
   shopeeRows: [],
   fbCampaigns: [],
+  fbBreakdown: [],       // Breakdown FB Ads (age/gender/platform/region) kalau file breakdown diupload
+  filteredFbBreakdown: [],
   clickReport: [],      // Website Click Report data
   filteredClicks: [],    // Filtered click report data
   mapping: {},
@@ -120,14 +122,17 @@ async function runAnalysis() {
     }
 
     state.fbCampaigns = [];
+    state.fbBreakdown = [];
     for (const f of fbFiles) {
+      let raw;
       if (f.name.match(/\.csv$/i)) {
-        const text = await readAsText(f);
-        state.fbCampaigns.push(...parseFbCSV(text));
+        raw = fbRawFromCSV(await readAsText(f));
       } else {
-        const buf = await readAsArrayBuffer(f);
-        state.fbCampaigns.push(...parseFbXLSX(buf));
+        raw = fbRawFromXLSX(await readAsArrayBuffer(f));
       }
+      // Satu file FB bisa dipakai dua arah: agregat campaign + breakdown (kalau ada kolomnya)
+      state.fbCampaigns.push(...extractFbRows(raw));
+      state.fbBreakdown.push(...extractFbBreakdown(raw));
     }
 
     // Parse Website Click Report
@@ -288,6 +293,7 @@ async function saveSession() {
       savedAt: Date.now(),
       shopeeRows: state.shopeeRows,
       fbCampaigns: state.fbCampaigns,
+      fbBreakdown: state.fbBreakdown,
       clickReport: state.clickReport,
       mapping: state.mapping,
       filterStart: document.getElementById('filter-start').value,
@@ -337,6 +343,7 @@ async function restoreSession() {
   showLoading('Memulihkan sesi terakhir...');
   state.shopeeRows = s.shopeeRows || [];
   state.fbCampaigns = s.fbCampaigns || [];
+  state.fbBreakdown = s.fbBreakdown || [];
   state.clickReport = s.clickReport || [];
   state.mapping = s.mapping || {};
   document.getElementById('filter-start').value = s.filterStart || '';
@@ -441,6 +448,13 @@ function applyFilters() {
       state.dateRatio = 1;
     }
   }
+  // Filter breakdown FB by date
+  state.filteredFbBreakdown = state.fbBreakdown.filter(b => {
+    if (!b.date) return true;
+    if (start && b.date < start) return false;
+    if (end   && b.date > end)   return false;
+    return true;
+  });
   // Filter click report by date (per-batas, konsisten dengan filter Shopee & FB)
   state.filteredClicks = state.clickReport.filter(c => {
     if (!c.date) return true;
@@ -454,8 +468,8 @@ function applyFilters() {
 }
 
 function renderAll() {
+  try { renderSmartReport(); } catch(e) { console.warn('renderSmartReport:', e); }
   try { renderKPIs(); } catch(e) { console.warn('renderKPIs:', e); }
-  try { renderInsightBar(); } catch(e) { console.warn('renderInsightBar:', e); }
   try { renderCampaignTab(); } catch(e) { console.warn('renderCampaignTab:', e); }
   try { renderProductTab(); } catch(e) { console.warn('renderProductTab:', e); }
   try { renderComparisonTab(); } catch(e) { console.warn('renderComparisonTab:', e); }
@@ -463,6 +477,7 @@ function renderAll() {
   try { renderStatusTab(); } catch(e) { console.warn('renderStatusTab:', e); }
   try { renderDecisionTab(); } catch(e) { console.warn('renderDecisionTab:', e); }
   try { renderClickInsights(); } catch(e) { console.warn('renderClickInsights:', e); }
+  try { renderFbBreakdown(); } catch(e) { console.warn('renderFbBreakdown:', e); }
 }
 
 // --- MERGE SHOPEE + FB ------------------------------------------
@@ -590,7 +605,7 @@ function renderKPIs() {
     { label: 'Total Komisi Bersih', value: 'Rp ' + fmtK(totalKomisi), sub: 'dari semua campaign', color: 'green',
       badge: totalProfit >= 0 ? { text: 'Untung', cls: 'pos' } : { text: 'Rugi', cls: 'neg' } },
     { label: 'Total Spend Iklan', value: 'Rp ' + fmtK(totalSpent), sub: 'Facebook Ads', color: 'orange' },
-    { label: 'Profit / Loss', value: 'Rp ' + fmtK(Math.abs(totalProfit)),
+    { label: 'Profit / Loss', value: (totalProfit >= 0 ? 'Rp ' : '-Rp ') + fmtK(Math.abs(totalProfit)),
       sub: totalProfit >= 0 ? '▲ profit' : '▼ rugi',
       color: totalProfit >= 0 ? 'green' : 'red',
       badge: totalProfit >= 0
@@ -612,79 +627,73 @@ function renderKPIs() {
   `).join('');
 }
 
-// --- INSIGHT BAR ------------------------------------------------
-function renderInsightBar() {
-  const bar = document.getElementById('insight-bar');
+// --- SMART REPORT (panel verdict di atas KPI) --------------------
+// Jumlah hari unik dalam periode terfilter (dipakai hitungan per-hari)
+function daysInPeriod() {
+  return new Set([
+    ...state.filteredShopee.map(r => r.date).filter(Boolean),
+    ...state.filteredFb.map(c => c.date).filter(Boolean),
+  ]).size || 1;
+}
+
+function renderSmartReport() {
+  const el = document.getElementById('smart-report');
+  if (!el) return;
   const campaigns = buildCampaignData().filter(c => c.spent > 0 || c.orders > 0);
-  if (campaigns.length === 0) { bar.style.display = 'none'; return; }
+  if (campaigns.length === 0) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
 
-  const insights = [];
+  const totalSpent = campaigns.reduce((s, c) => s + c.spent, 0);
+  const totalKomisi = campaigns.reduce((s, c) => s + c.komisi, 0);
+  const profit = totalKomisi - totalSpent;
+  const roas = totalSpent > 0 ? totalKomisi / totalSpent : null;
 
-  const withRoas = campaigns.filter(c => c.roas !== null);
-  if (withRoas.length > 0) {
-    const best = withRoas.reduce((a, b) => b.roas > a.roas ? b : a);
-    insights.push({
-      icon: '',
-      text: `<strong>${esc(best.name)}</strong> adalah campaign terbaik dengan ROAS <strong>${best.roas.toFixed(2)}x</strong> dan komisi <strong>Rp${fmtK(best.komisi)}</strong>`,
-      type: 'positive'
-    });
+  // Komisi cair vs pending vs gagal — dari kolom Status Pesanan di file komisi yang SAMA
+  let cair = 0, pending = 0, gagal = 0;
+  state.filteredShopee.forEach(r => {
+    const st = (r.status || '').toLowerCase();
+    if (st.includes('selesai')) cair += r.komisiBersih;
+    else if (st.includes('tertu') || st.includes('belum dibayar')) pending += r.komisiBersih;
+    else gagal += r.komisiBersih;
+  });
+
+  const days = daysInPeriod();
+  const withSpend = campaigns.filter(c => c.spent > 0);
+  const worst = withSpend.slice().sort((a, b) => (a.roas ?? Infinity) - (b.roas ?? Infinity))[0] || null;
+  const best = campaigns.filter(c => c.roas !== null).sort((a, b) => b.roas - a.roas)[0] || null;
+  const worstFunnel = campaigns.filter(c => c.fbLinkClicks > 0 && c.dropClickToShopeePct != null && isFinite(c.dropClickToShopeePct))
+    .sort((a, b) => b.dropClickToShopeePct - a.dropClickToShopeePct)[0] || null;
+
+  const verdict = totalSpent === 0 ? 'Tanpa Spend'
+    : profit >= 0 ? 'UNTUNG Rp ' + fmt(profit) : 'RUGI Rp ' + fmt(Math.abs(profit));
+  const verdictColor = totalSpent === 0 ? 'var(--text-primary)' : profit >= 0 ? '#10b981' : '#ef4444';
+
+  let worstBep = '';
+  if (worst && worst.roas !== null && worst.roas < 1 && worst.komisiPerOrder > 0) {
+    const needed = Math.ceil((worst.spent / days) / worst.komisiPerOrder);
+    const actual = (worst.orders / days).toFixed(1);
+    worstBep = 'butuh ' + needed + ' order/hari (realita ' + actual + '/hari)';
   }
 
-  const withSpend = campaigns.filter(c => c.spent > 0 && c.roas !== null && c.roas < 1);
-  if (withSpend.length > 0) {
-    const worst = withSpend.reduce((a, b) => b.roas < a.roas ? b : a);
-    insights.push({
-      icon: '⛔',
-      text: `<strong>${esc(worst.name)}</strong> rugi dengan ROAS <strong>${worst.roas.toFixed(2)}x</strong> - disarankan di-pause atau dioptimasi kreatif`,
-      type: 'negative'
-    });
-  }
-
-  const highCtrLowRoas = campaigns.filter(c => c.fb && c.fb.ctr > 3 && c.roas !== null && c.roas < 1.5);
-  if (highCtrLowRoas.length > 0) {
-    const c = highCtrLowRoas[0];
-    insights.push({
-      icon: '💡',
-      text: `<strong>${esc(c.name)}</strong> punya CTR tinggi (${c.fb.ctr.toFixed(1)}%) tapi ROAS rendah (${c.roas.toFixed(2)}x) - kemungkinan masalah ada di halaman produk atau harga`,
-      type: 'warning'
-    });
-  }
-
-  const pendingRows = state.filteredShopee.filter(r => /tertu|belum dibayar/i.test(r.status || ''));
-  if (pendingRows.length > 0) {
-    const pendingKomisi = pendingRows.reduce((s, r) => s + r.komisiBersih, 0);
-    const pendingOrders = new Set(pendingRows.map(r => r.orderId)).size;
-    insights.push({
-      icon: '⏳',
-      text: `<strong>${pendingOrders} pesanan</strong> masih berstatus Tertunda/Belum Dibayar - estimasi komisi pending <strong>Rp${fmtK(pendingKomisi)}</strong>`,
-      type: 'neutral'
-    });
-  }
-
-  const withCpo = campaigns.filter(c => c.cpo !== null && c.cpo > 0);
-  if (withCpo.length > 0) {
-    const mostEfficient = withCpo.reduce((a, b) => b.cpo < a.cpo ? b : a);
-    insights.push({
-      icon: '🎯',
-      text: `Campaign <strong>${esc(mostEfficient.name)}</strong> paling efisien dengan CPO terendah: <strong>Rp${fmt(mostEfficient.cpo)}</strong> per order`,
-      type: 'positive'
-    });
-  }
-
-  if (insights.length === 0) { bar.style.display = 'none'; return; }
-
-  bar.style.display = 'flex';
-  bar.innerHTML = `
-    <div class="insight-bar-header">💡 Quick Insights</div>
-    <div class="insight-list">
-      ${insights.slice(0, 4).map(ins => `
-        <div class="insight-item insight-${ins.type}">
-          <span class="insight-icon">${ins.icon}</span>
-          <span class="insight-text">${ins.text}</span>
-        </div>
-      `).join('')}
+  el.innerHTML = `
+    <div class="sr-head">
+      <span>🤖</span>
+      <span>Smart Report — Posisi: <span style="color:${verdictColor}">${verdict}</span></span>
+      ${roas !== null ? `<span class="sr-roas ${colorRoas(roas)}">ROAS ${roas.toFixed(2)}x</span>` : ''}
     </div>
-  `;
+    <div class="sr-grid">
+      <div class="sr-item"><div class="sr-label">💰 Komisi (kondisi)</div>
+        Cair <strong>Rp ${fmt(cair)}</strong> · Pending <strong>Rp ${fmt(pending)}</strong>${gagal > 0 ? ' · Gagal <strong>Rp ' + fmt(gagal) + '</strong>' : ''}
+        <div style="font-size:11px;color:#94a3b8">komisi pending biasanya cair 10-15 hari kerja</div></div>
+      <div class="sr-item"><div class="sr-label">💸 Iklan</div>
+        Spend <strong>Rp ${fmt(totalSpent)}</strong> dalam <strong>${days} hari</strong>${profit < 0 ? ' · defisit <strong>-Rp ' + fmt(Math.abs(profit)) + '</strong>' : ''}</div>
+      ${best && best.roas >= 1 ? `<div class="sr-item"><div class="sr-label">🚀 Pertahankan & scale</div>
+        <strong>${esc(best.name)}</strong> — ROAS ${best.roas.toFixed(2)}x · komisi Rp ${fmt(best.komisi)}</div>` : ''}
+      ${worst && worst.roas !== null && worst.roas < 1 ? `<div class="sr-item"><div class="sr-label">⛔ Kandidat pause</div>
+        <strong>${esc(worst.name)}</strong> — ROAS ${worst.roas.toFixed(2)}x · rugi -Rp ${fmt(Math.abs(worst.profit))}${worstBep ? ' · ' + worstBep : ''}</div>` : ''}
+      ${worstFunnel ? `<div class="sr-item"><div class="sr-label">🔍 Klik bocor terparah</div>
+        <strong>${esc(worstFunnel.name)}</strong> — ${worstFunnel.dropClickToShopeePct.toFixed(0)}% klik gak sampai Shopee (${fmt(worstFunnel.dropClickToShopee)} klik hilang)</div>` : ''}
+    </div>`;
 }
 
 // --- CAMPAIGN TAB -----------------------------------------------
@@ -769,7 +778,7 @@ function renderCampaignTab() {
       <td>${c.spent > 0 ? 'Rp ' + fmt(c.spent) : '-'}</td>
       <td>${c.orders}</td>
       <td>Rp ${fmt(c.komisi)}</td>
-      <td class="${c.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${c.profit >= 0 ? '(+)' : '▼'} Rp ${fmt(Math.abs(c.profit))}</td>
+      <td class="${c.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${c.profit >= 0 ? 'Rp ' : '-Rp '}${fmt(Math.abs(c.profit))}</td>
       <td class="${roasClass}">${roasTxt}</td>
       <td>${cpoTxt}</td>
       <td>${c.fb ? fmt(c.fb.impressions) : '-'}</td>
@@ -1338,6 +1347,80 @@ function renderClickInsights() {
   });
 }
 
+// --- FB BREAKDOWN: AGE / GENDER / PLATFORM / REGION -------------
+function renderFbBreakdown() {
+  const wrapAge = document.getElementById('chart-fb-age');
+  const wrapGender = document.getElementById('chart-fb-gender');
+  const wrapPlatform = document.getElementById('chart-fb-platform');
+  const wrapRegion = document.getElementById('chart-fb-region');
+  if (!wrapAge || !wrapGender || !wrapPlatform || !wrapRegion) return;
+
+  const bd = state.filteredFbBreakdown || [];
+  if (bd.length === 0) {
+    ['fbAge', 'fbGender', 'fbPlatform', 'fbRegion'].forEach(k => destroyChart(k));
+    const msg = 'Belum ada data breakdown. Export dari Ads Manager dengan Breakdown (Age / Gender / Platform / Region) diaktifkan, lalu upload sebagai file FB Ads tambahan.';
+    wrapAge.innerHTML = '<div class="chart-empty">' + msg + '</div>';
+    wrapGender.innerHTML = wrapPlatform.innerHTML = wrapRegion.innerHTML = '<div class="chart-empty">' + msg + '</div>';
+    return;
+  }
+
+  const agg = (keyFn, order) => {
+    const m = {};
+    bd.forEach(r => {
+      const k = keyFn(r);
+      if (!k) return;
+      if (!m[k]) m[k] = { clicks: 0, spent: 0 };
+      m[k].clicks += r.linkClicks;
+      m[k].spent += r.spent;
+    });
+    let entries = Object.entries(m);
+    if (order) entries.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
+    else entries.sort((a, b) => b[1].clicks - a[1].clicks);
+    return entries;
+  };
+
+  // AGE — urut sesuai rentang usia
+  const ageData = agg(r => r.age, FB_AGE_ORDER.concat('unknown'));
+  destroyChart('fbAge');
+  const ageCanvas = ensureCanvas(wrapAge);
+  state.charts['fbAge'] = new Chart(ageCanvas, {
+    type: 'bar',
+    data: { labels: ageData.map(([k]) => k), datasets: [{ label: 'Klik', data: ageData.map(([, v]) => v.clicks), backgroundColor: '#6366f1', borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = ageData[ctx.dataIndex][1]; return [`${fmt(d.clicks)} klik`, `Spend Rp${fmtK(d.spent)}`]; } } } }, scales: { y: { beginAtZero: true } } }
+  });
+
+  // GENDER — doughnut
+  const genderData = agg(r => r.gender);
+  const genderColors = { 'Laki-laki': '#3b82f6', 'Perempuan': '#ec4899', 'Tidak diketahui': '#94a3b8' };
+  destroyChart('fbGender');
+  const genderCanvas = ensureCanvas(wrapGender);
+  state.charts['fbGender'] = new Chart(genderCanvas, {
+    type: 'doughnut',
+    data: { labels: genderData.map(([k]) => k), datasets: [{ data: genderData.map(([, v]) => v.clicks), backgroundColor: genderData.map(([k]) => genderColors[k] || '#64748b'), hoverOffset: 8 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => { const d = genderData[ctx.dataIndex][1]; return `${ctx.label}: ${fmt(d.clicks)} klik (Spend Rp${fmtK(d.spent)})`; } } } } }
+  });
+
+  // PLATFORM
+  const platData = agg(r => r.platform);
+  destroyChart('fbPlatform');
+  const platCanvas = ensureCanvas(wrapPlatform);
+  state.charts['fbPlatform'] = new Chart(platCanvas, {
+    type: 'bar',
+    data: { labels: platData.map(([k]) => k), datasets: [{ label: 'Klik', data: platData.map(([, v]) => v.clicks), backgroundColor: '#10b981', borderRadius: 4 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = platData[ctx.dataIndex][1]; return [`${fmt(d.clicks)} klik`, `Spend Rp${fmtK(d.spent)}`]; } } } }, scales: { x: { beginAtZero: true } } }
+  });
+
+  // REGION — top 8
+  const regData = agg(r => r.region).slice(0, 8);
+  destroyChart('fbRegion');
+  const regCanvas = ensureCanvas(wrapRegion);
+  state.charts['fbRegion'] = new Chart(regCanvas, {
+    type: 'bar',
+    data: { labels: regData.map(([k]) => k.length > 30 ? k.slice(0, 30) + '…' : k), datasets: [{ label: 'Klik', data: regData.map(([, v]) => v.clicks), backgroundColor: '#f97316', borderRadius: 4 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = regData[ctx.dataIndex][1]; return [`${fmt(d.clicks)} klik`, `Spend Rp${fmtK(d.spent)}`]; } } } }, scales: { x: { beginAtZero: true } } }
+  });
+}
+
 // --- DECISION TAB -----------------------------------------------
 function renderDecisionTab() {
   const campaigns = buildCampaignData().filter(c => c.spent > 0 || c.orders > 0);
@@ -1382,6 +1465,15 @@ function renderDecisionTab() {
       if (c.fb.cpc > 5000) fbHint += ` CPC mahal (Rp${fmt(c.fb.cpc)}) - narrow audience atau kompetisi tinggi.`;
     }
 
+    // BEP konkret: berapa order/hari yang dibutuhkan vs realita
+    let bepLine = '';
+    if (c.spent > 0 && c.komisiPerOrder > 0) {
+      const days = daysInPeriod();
+      const needed = Math.ceil((c.spent / days) / c.komisiPerOrder);
+      const actual = (c.orders / days).toFixed(1);
+      bepLine = `Butuh <strong>${needed} order/hari</strong> demi balik modal (realita ${actual}/hari, komisi/order Rp ${fmt(c.komisiPerOrder)}). `;
+    }
+
     return `
     <div class="decision-card">
       <div class="decision-card-header">
@@ -1402,7 +1494,7 @@ function renderDecisionTab() {
         <div class="dm-item"><div class="dm-label">CTR</div><div class="dm-value" style="font-size:13px;${c.fb.ctr < 1 ? 'color:#ef4444' : c.fb.ctr > 3 ? 'color:#10b981' : ''}">${ctrTxt}</div></div>
         <div class="dm-item"><div class="dm-label">CPC</div><div class="dm-value" style="font-size:13px">${cpcTxt}</div></div>
       </div>` : ''}
-      <div class="decision-reason">${reason}${fbHint}</div>
+      <div class="decision-reason">${bepLine}${reason}${fbHint}</div>
     </div>`;
   }).join('') || '<p class="no-data">Tidak ada data untuk ditampilkan.</p>';
 }
@@ -1559,6 +1651,7 @@ function resetAll() {
   clearSession();
   shopeeFiles = []; fbFiles = []; clickFiles = [];
   state.shopeeRows = []; state.fbCampaigns = []; state.clickReport = [];
+  state.fbBreakdown = []; state.filteredFbBreakdown = [];
   state.filteredShopee = []; state.filteredFb = []; state.filteredClicks = [];
   Object.keys(state.charts).forEach(k => { try { state.charts[k].destroy(); } catch {} });
   state.charts = {};
@@ -1649,6 +1742,7 @@ function loadDemoData() {
 
   state.mapping = {};
   state.clickReport = [];
+  state.fbBreakdown = [];
   state.fbCampaigns.forEach(c => { state.mapping[c.campaignName] = c.campaignName; });
 
   setTimeout(() => { buildDashboard(); }, 300);

@@ -7,7 +7,7 @@
   <meta name="description" content="Tool analisis ROAS dan profitabilitas untuk Shopee Affiliate yang menggunakan Facebook Ads. Upload dua file, langsung dapat insight." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260829" />
+  <link rel="stylesheet" href="style.css?v=20260829b" />
 </head>
 <body>
   <!-- HEADER -->
@@ -131,8 +131,8 @@
         </div>
       </div>
 
-      <!-- INSIGHT BAR -->
-      <div id="insight-bar" class="insight-bar" style="display:none"></div>
+      <!-- SMART REPORT -->
+      <div id="smart-report" class="smart-report" style="display:none"></div>
 
       <!-- KPI CARDS -->
       <div class="kpi-grid" id="kpi-grid"></div>
@@ -273,6 +273,28 @@
           </div>
         </div>
 
+        <!-- Breakdown Iklan FB: Age/Gender/Platform/Region (butuh export breakdown dari Ads Manager) -->
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">👥 Klik per Usia <span class="chart-hint">(breakdown FB Ads)</span></div>
+            <div class="chart-wrap" id="chart-fb-age"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">⚧ Gender <span class="chart-hint">(breakdown FB Ads)</span></div>
+            <div class="chart-wrap" id="chart-fb-gender"></div>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">📱 Platform <span class="chart-hint">(breakdown FB Ads)</span></div>
+            <div class="chart-wrap" id="chart-fb-platform"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">🗺️ Wilayah Iklan <span class="chart-hint">(breakdown FB Ads, top 8)</span></div>
+            <div class="chart-wrap" id="chart-fb-region"></div>
+          </div>
+        </div>
+
         <!-- Funnel per Campaign -->
         <div class="chart-card" style="margin-bottom:16px">
           <div class="chart-title-row">
@@ -395,7 +417,7 @@
   <!-- SCRIPTS -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="parsers.js?v=20260829"></script>
-  <script src="app.js?v=20260829c"></script>
+  <script src="parsers.js?v=20260829b"></script>
+  <script src="app.js?v=20260829d"></script>
 </body>
 </html>

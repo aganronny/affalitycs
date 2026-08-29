@@ -193,17 +193,15 @@ function resolveClickKey(tagLink, fbNameSet, mapping) {
 }
 
 // --- PARSE FB ADS XLSX ------------------------------------------
-function parseFbXLSX(arrayBuffer) {
+function fbRawFromXLSX(arrayBuffer) {
   const data = new Uint8Array(arrayBuffer);
   const wb = XLSX.read(data, { type: 'array' });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
-  console.log('[FB XLSX] rows:', raw.length);
-  return extractFbRows(raw);
+  return XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
 }
 
 // --- PARSE FB ADS CSV -------------------------------------------
-function parseFbCSV(text) {
+function fbRawFromCSV(text) {
   const lines = text.split('\n').filter(l => l.trim());
   if (lines.length < 2) return [];
 
@@ -221,7 +219,91 @@ function parseFbCSV(text) {
     });
     raw.push(row);
   }
-  return extractFbRows(raw);
+  return raw;
+}
+
+function parseFbCSV(text) {
+  return extractFbRows(fbRawFromCSV(text));
+}
+
+function parseFbXLSX(arrayBuffer) {
+  return extractFbRows(fbRawFromXLSX(arrayBuffer));
+}
+
+// --- FB BREAKDOWN (Age / Gender / Platform / Region) -------------
+// File dari Ads Manager dengan Breakdown diaktifkan: baris per campaign x nilai breakdown.
+// Kolom breakdown opsional — kalau tidak ada satu pun, baris di-skip (bukan file breakdown).
+const FB_AGE_ORDER = ['13-17', '18-24', '25-34', '35-44', '45-54', '55-64', '65+'];
+
+function normalizeFbGender(g) {
+  const s = String(g || '').trim().toLowerCase();
+  if (!s) return '';
+  // cek 'female' SEBELUM 'male' ('female' mengandung 'male')
+  if (s === 'female' || s === 'f' || s.startsWith('perempuan')) return 'Perempuan';
+  if (s === 'male' || s === 'm' || s.startsWith('laki')) return 'Laki-laki';
+  if (s === 'unknown') return 'Tidak diketahui';
+  return String(g || '').trim();
+}
+
+function extractFbBreakdown(raw) {
+  const rows = [];
+  for (const row of raw) {
+    const keys = Object.keys(row);
+    // exact dulu, baru includes — biar 'Platform' gak nyangkut ke 'Platform position'
+    const getExact = (patterns) => {
+      for (const p of patterns) {
+        const k = keys.find(k => k.toLowerCase() === p.toLowerCase());
+        if (k !== undefined) return row[k];
+      }
+      return '';
+    };
+    const getIn = (patterns) => {
+      for (const p of patterns) {
+        const k = keys.find(k => k.toLowerCase().includes(p.toLowerCase()));
+        if (k !== undefined) return row[k];
+      }
+      return '';
+    };
+
+    const age = String(getExact(['Age', 'Usia']) || '').trim();
+    const gender = normalizeFbGender(getExact(['Gender', 'Jenis kelamin']));
+    const region = String(getExact(['Region', 'Wilayah']) || '').trim();
+    const platform = String(getExact(['Publisher platform', 'Platform']) || '').trim();
+    if (!age && !gender && !region && !platform) continue;
+
+    const campaignName = String(getIn(['Campaign name', 'nama campaign', 'nama kampanye']) || '').trim();
+    if (!campaignName || campaignName === 'Campaign name') continue;
+
+    const parseDateAny = (v) => {
+      const rawd = String(v || '').trim();
+      if (!rawd) return '';
+      let m = rawd.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+      m = rawd.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      m = rawd.match(/(\d{4})\/(\d{2})\/(\d{2})/);
+      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      return '';
+    };
+
+    rows.push({
+      campaignName,
+      date: parseDateAny(getIn(['Day', 'Reporting starts', 'Hari', 'Tanggal mulai pelaporan', 'Date', 'Tanggal'])),
+      age, gender, region, platform,
+      spent:       parseSpent(getIn(['Amount spent', 'Jumlah yang dibelanjakan'])),
+      impressions: parseNum(getIn(['Impressions', 'Tayangan'])),
+      linkClicks:  parseNum(getIn(['Link clicks', 'Klik tautan'])),
+    });
+  }
+  return rows;
+}
+
+function parseFbBreakdownCSV(text) {
+  return extractFbBreakdown(fbRawFromCSV(text));
+}
+
+function parseFbBreakdownXLSX(arrayBuffer) {
+  return extractFbBreakdown(fbRawFromXLSX(arrayBuffer));
 }
 
 // --- SHARED FB ROW EXTRACTOR ------------------------------------
@@ -311,7 +393,9 @@ function resolveShopeeKey(row, fbNameSet, mapping) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     fmt, fmtK, fmtRoas, parseNum, parseSpent, esc, normalizeName, splitCSVLine,
-    parseShopeeCSV, parseClickReportCSV, parseFbCSV, extractFbRows,
+    parseShopeeCSV, parseClickReportCSV,
+    fbRawFromCSV, fbRawFromXLSX, parseFbCSV, parseFbXLSX, extractFbRows,
+    FB_AGE_ORDER, normalizeFbGender, extractFbBreakdown, parseFbBreakdownCSV, parseFbBreakdownXLSX,
     resolveShopeeKey, resolveClickKey,
   };
 }

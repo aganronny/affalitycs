@@ -19,6 +19,8 @@
 - Matching tag→campaign pakai 5 lapis (manual mapping → exact → normalized → partial → raw fallback) karena naming Shopee tag vs nama campaign FB sering beda.
 - Funnel tahap 2 (klik masuk Shopee) pakai Website Click Report kalau ada, fallback ke Landing Page Views FB.
 - Setiap render dibungkus try/catch terpisah: satu chart error gak bikin dashboard mati total.
+- Smart Report pakai komisi PENDING (bukan cuma cair) sesuai maunya user — keputusan butuh kecepatan, bukan nunggu cair 10-15 hari kerja. Split cair/pending/gagal dihitung dari kolom Status Pesanan file yang SAMA (tanpa upload tambahan).
+- Nilai rugi selalu pakai tanda minus eksplisit (-Rp X), bukan cuma warna — biar gak ambigu buat user.
 
 ## Quirks & Gotcha
 - Typo di parser itu SENGAJA — match header asli ekspor Shopee: "Nama Barange", "Kampanye Partnerr", "Status Pemebelian". Jangan "diperbaiki".

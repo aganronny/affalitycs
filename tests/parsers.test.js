@@ -135,4 +135,31 @@ t("'gacoan01----' -> exact via tag1", () =>
 t("mapping manual diprioritaskan", () =>
   assert.strictEqual(P.resolveClickKey('gacoan01----', new Set(), { gacoan01: 'Gacoan Ads' }), 'Gacoan Ads'));
 
+// ---------- extractFbBreakdown ----------
+console.log('extractFbBreakdown');
+const bdCsv = '"Reporting starts","Campaign name","Amount spent (IDR)","Link clicks","Impressions","Age","Gender"\n' +
+  '"2026-08-28","cp01","1000","10","100","18-24","male"\n' +
+  '"2026-08-28","cp01","2500","20","200","25-34","female"\n' +
+  '"2026-08-28","cp01","500","3","50","35-44","unknown"\n';
+const bd = P.extractFbBreakdown(P.fbRawFromCSV(bdCsv));
+t("3 baris breakdown terbaca", () => assert.strictEqual(bd.length, 3));
+t("gender 'male' -> Laki-laki, 'female' -> Perempuan, 'unknown' -> Tidak diketahui", () => {
+  assert.strictEqual(bd[0].gender, 'Laki-laki');
+  assert.strictEqual(bd[1].gender, 'Perempuan');
+  assert.strictEqual(bd[2].gender, 'Tidak diketahui');
+});
+t("spent pakai parseSpent ('1.000' = seribu)", () => {
+  const bd2 = P.extractFbBreakdown(P.fbRawFromCSV(bdCsv.replace('"1000"', '"1.000"')));
+  assert.strictEqual(bd2[0].spent, 1000);
+});
+t("file campaign biasa (tanpa kolom breakdown) -> array kosong", () => {
+  const plain = '"Reporting starts","Campaign name","Amount spent (IDR)","Link clicks"\n"2026-08-28","cp01","5000","50"\n';
+  assert.strictEqual(P.extractFbBreakdown(P.fbRawFromCSV(plain)).length, 0);
+});
+t("extractFbRows tetap bekerja di file yang sama (agregat campaign)", () => {
+  const camp = P.extractFbRows(P.fbRawFromCSV(bdCsv));
+  assert.strictEqual(camp.length, 3);
+  assert.strictEqual(camp[0].campaignName, 'cp01');
+});
+
 console.log(`\nALL TESTS PASSED (${passed} kasus)`);
