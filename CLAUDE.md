@@ -36,15 +36,17 @@ Alur data: **Upload → Parse → Matching → Filter → Render**
    - Kolom penting Shopee: `Tag_link1`, `Tag_link3`, `Komisi Bersih Affiliate (Rp)`, `Waktu Klik`, `Status Pesanan`
    - Tanggal dinormalisasi ke format `YYYY-MM-DD`
 2. **Matching tag → campaign** (`resolveShopeeKey`): urutan = manual mapping → exact → normalized → partial → fallback tag mentah
-3. **Filter** (`applyFilters`): rentang tanggal + toggle **PPN 11%** (FB spend × 1.11). Kalau FB data ter-agregat (tanpa kolom tanggal), spend diprorata pakai `dateRatio` (rasio jumlah hari)
+3. **Filter** (`applyFilters`): rentang tanggal + toggle **PPN 11%** (FB spend × 1.11) + toggle **Order valid saja** (default ON: status Belum Dibayar/Dibatalkan/Dikembalikan tidak dihitung sebagai pesanan). Kalau FB data ter-agregat (tanpa kolom tanggal), spend diprorata pakai `dateRatio` (rasio jumlah hari)
 4. **Merge** (`buildCampaignData`): gabung Shopee + FB + Click Report per campaign, hitung ROAS/CPO/profit/funnel 3 tahap
 5. **Render**: `renderAll()` memanggil 8 fungsi render (KPI, insight, 6 tab), masing-masing dibungkus try/catch biar satu error gak mematikan dashboard
 
 Metrik inti:
 - `ROAS = komisi bersih / spend FB`
-- `CPO = spend / orders (unique order ID)`
+- `CPO = spend / orders (unique order ID)` — hitungan pesanan mengikuti toggle "Order valid saja"
 - `Profit = komisi - spend`
-- Funnel 3 tahap: Klik Iklan FB → Klik Masuk Shopee (dari Click Report, fallback ke Landing Page Views) → Order
+- Funnel 3 tahap: Klik Iklan FB → Klik Masuk Shopee (dari Click Report **perujuk Facebook**, fallback total klik, lalu LPV) → Order
+- Click report di-dedup by `clickId` saat upload multi-file (aman dari periode overlap)
+- `parseSpent` khusus kolom FB spend: '18.415' = delapan belas ribu (guard format id-ID). `parseNum` global sengaja TIDAK diubah — nilai Shopee 3 desimal ('962.745') harus tetap kebaca desimal
 
 Aturan rekomendasi otomatis (tab Rekomendasi): ROAS ≥3 SCALE UP, ≥2 SCALE, ≥1.2 MAINTAIN, ≥0.8 MONITOR, <0.8 PAUSE.
 

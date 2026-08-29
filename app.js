@@ -29,6 +29,15 @@ const parseNum = (s) => {
 const colorRoas = (r) => r >= 2 ? 'roas-positive' : r >= 1 ? 'roas-neutral' : 'roas-negative';
 const normalizeName = (s) => String(s || '').toLowerCase().replace(/[\s\-_\.-]/g, '');
 
+// Order "valid" = bukan Belum Dibayar / Dibatalkan / Dikembalikan (untuk hitungan pesanan & funnel).
+// Bisa dimatikan lewat toggle "Order valid saja" di filter bar.
+const INVALID_ORDER_RE = /belum dibayar|dibatalkan|dikembalikan/i;
+function isCountableOrder(r) {
+  const t = document.getElementById('valid-orders-toggle');
+  if (!t || !t.checked) return true;
+  return !INVALID_ORDER_RE.test(r.status || '');
+}
+
 function showLoading(msg = 'Memproses data...') {
   document.getElementById('loading-text').textContent = msg;
   document.getElementById('loading-overlay').style.display = 'flex';
@@ -295,6 +304,15 @@ function parseFbCSV(text) {
   return extractFbRows(raw);
 }
 
+// FB "Amount spent (IDR)" selalu angka bulat — kalau export memakai format id-ID,
+// '18.415' berarti delapan belas ribu (ribuan), bukan delapan belas koma empat.
+// parseNum tidak bisa membedakan (rawan korup nilai Shopee 3 desimal seperti '962.745'),
+// jadi guard ini khusus kolom spend FB saja.
+function parseSpent(raw) {
+  const s = String(raw || '').trim().replace(/[^0-9.\-]/g, '');
+  return parseNum(/^-?\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : s);
+}
+
 // --- SHARED FB ROW EXTRACTOR ------------------------------------
 function extractFbRows(raw) {
   const campaigns = [];
@@ -328,7 +346,7 @@ function extractFbRows(raw) {
     campaigns.push({
       date,
       campaignName,
-      spent:            parseNum(get(['Amount spent', 'amount spent', 'Jumlah yang dibelanjakan'])),
+      spent:            parseSpent(get(['Amount spent', 'amount spent', 'Jumlah yang dibelanjakan'])),
       reach:            parseNum(get(['Reach', 'Jangkauan'])),
       impressions:      parseNum(get(['Impressions', 'Tayangan'])),
       linkClicks:       parseNum(get(['Link clicks', 'Klik tautan'])),
@@ -408,7 +426,15 @@ async function runAnalysis() {
       const text = await readAsText(f);
       state.clickReport.push(...parseClickReportCSV(text));
     }
-    console.log('[ClickReport] Total clicks loaded:', state.clickReport.length);
+    // Dedup klik ID — beberapa file click report yang periodenya overlap tidak dihitung dobel
+    const seenClickIds = new Set();
+    state.clickReport = state.clickReport.filter(c => {
+      if (!c.clickId) return true;
+      if (seenClickIds.has(c.clickId)) return false;
+      seenClickIds.add(c.clickId);
+      return true;
+    });
+    console.log('[ClickReport] Total clicks loaded:', state.clickReport.length, '(duplikat dibuang)');
 
     showLoading('Mencocokkan data...');
     await sleep(50);
@@ -617,12 +643,13 @@ function applyFilters() {
       state.dateRatio = 1;
     }
   }
-  // Filter click report by date
-  if (start && end) {
-    state.filteredClicks = state.clickReport.filter(c => c.date >= start && c.date <= end);
-  } else {
-    state.filteredClicks = [...state.clickReport];
-  }
+  // Filter click report by date (per-batas, konsisten dengan filter Shopee & FB)
+  state.filteredClicks = state.clickReport.filter(c => {
+    if (!c.date) return true;
+    if (start && c.date < start) return false;
+    if (end   && c.date > end)   return false;
+    return true;
+  });
   console.log('[Filter] dateRatio:', state.dateRatio.toFixed(3), 'fbHasDates:', fbHasDates, 'clicks:', state.filteredClicks.length);
   renderAll();
 }
@@ -692,7 +719,8 @@ function buildCampaignData() {
       fbRow.cpm = fbRow.impressions > 0 ? (fbRow.spent / fbRow.impressions) * 1000 : 0;
     }
 
-    const uniqueOrders = new Set(shopeeRows.map(r => r.orderId));
+    const countableRows = shopeeRows.filter(isCountableOrder);
+    const uniqueOrders = new Set(countableRows.map(r => r.orderId));
     const orders = uniqueOrders.size;
     const komisi = shopeeRows.reduce((s, r) => s + r.komisiBersih, 0);
     const nilaiPembelian = shopeeRows.reduce((s, r) => s + r.nilaiPembelian, 0);
@@ -718,9 +746,10 @@ function buildCampaignData() {
     const shopeeClicksFb = clickData ? clickData.fromFacebook : 0;
     const shopeeClicksOthers = clickData ? clickData.fromOthers : 0;
     const landingViews = fbRow ? Math.round(fbRow.landingPageViews * ratio) : 0;
-    // Use real click data if available, otherwise fall back to LPV
-    const stage2Value = shopeeClicks > 0 ? shopeeClicks : landingViews;
-    const stage2Source = shopeeClicks > 0 ? 'click_report' : 'lpv';
+    // Use real click data if available — prioritas klik perujuk Facebook (konteks funnel iklan),
+    // fallback ke total klik kalau tidak ada yang berujuk FB, terakhir ke LPV
+    const stage2Value = clickData ? (shopeeClicksFb > 0 ? shopeeClicksFb : shopeeClicks) : landingViews;
+    const stage2Source = clickData ? 'click_report' : 'lpv';
     // Stage 3: Yang Order (unique orders dari Shopee)
     // orders sudah dihitung di atas
 
@@ -752,7 +781,7 @@ function renderKPIs() {
   const campaigns = buildCampaignData();
   const totalSpent  = campaigns.reduce((s, c) => s + c.spent, 0);
   const totalKomisi = campaigns.reduce((s, c) => s + c.komisi, 0);
-  const totalOrders = new Set(state.filteredShopee.map(r => r.orderId)).size;
+  const totalOrders = new Set(state.filteredShopee.filter(isCountableOrder).map(r => r.orderId)).size;
   const totalProfit = totalKomisi - totalSpent;
   const overallRoas = totalSpent > 0 ? totalKomisi / totalSpent : null;
   const totalNilai  = state.filteredShopee.reduce((s, r) => s + r.nilaiPembelian, 0);
@@ -963,13 +992,13 @@ function getStatusBadge(roas, spent) {
 // --- PRODUCT TAB ------------------------------------------------
 function renderProductTab() {
   const byProduct = {};
+  const fbNameSet = new Set(state.filteredFb.map(c => c.campaignName));
   state.filteredShopee.forEach(r => {
     const key = r.barang || '(tidak diketahui)';
     if (!byProduct[key]) byProduct[key] = { name: key, kategori: r.kategori1 || '-', orders: new Set(), nilai: 0, komisi: 0, campaigns: new Set() };
-    byProduct[key].orders.add(r.orderId);
+    if (isCountableOrder(r)) byProduct[key].orders.add(r.orderId);
     byProduct[key].nilai  += r.nilaiPembelian;
     byProduct[key].komisi += r.komisiBersih;
-    const fbNameSet = new Set(state.filteredFb.map(c => c.campaignName));
     const { key: campKey } = resolveShopeeKey(r, fbNameSet, state.mapping);
     byProduct[key].campaigns.add(campKey);
   });
@@ -1188,7 +1217,7 @@ function renderComparisonTab() {
         <div class="cl-card">
           <div class="cl-label">2. Klik Masuk Shopee</div>
           <div class="cl-value" style="color:#8b5cf6">${fmt(totalShopeeClk)}</div>
-          <div class="cl-sub">${state.clickReport.length > 0 ? 'dari Click Report' : 'dari Landing Page Views'}</div>
+          <div class="cl-sub">${state.clickReport.length > 0 ? 'dari Click Report (perujuk Facebook)' : 'dari Landing Page Views'}</div>
         </div>
         <div class="cl-card">
           <div class="cl-label">↓ Hilang ${dropStage2Pct.toFixed(1)}%</div>
@@ -1317,7 +1346,7 @@ function renderTrendTab() {
   let colorIdx = 0;
 
   state.filteredShopee.forEach(r => {
-    if (!r.date) return;
+    if (!r.date || !isCountableOrder(r)) return;
     const { key } = resolveShopeeKey(r, fbNameSet, state.mapping);
     if (!byDate[r.date]) byDate[r.date] = {};
     if (!byDate[r.date][key]) byDate[r.date][key] = { orders: new Set(), komisi: 0 };
@@ -1436,7 +1465,7 @@ function renderStatusTab() {
     });
   }
 
-  const statusIcons = { 'Tertunda': '⏳', 'Selesai': '✅', 'Dibatalkan': '❌', 'Dikembalikan': '↩️' };
+  const statusIcons = { 'Tertunda': '⏳', 'Selesai': '✅', 'Dibatalkan': '❌', 'Dikembalikan': '↩️', 'Belum Dibayar': '💳' };
   document.getElementById('status-summary-grid').innerHTML = statusList.map(([status, d]) => `
     <div class="status-card">
       <div class="status-card-icon">${statusIcons[status] || ''}</div>
@@ -1549,8 +1578,12 @@ function sortTable(tableId, colIdx) {
   state.sortDir[key] = !state.sortDir[key];
 
   const parse = (s) => {
-    const n = parseNum(s.replace(/[^0-9.\-]+/g, ''));
-    return isNaN(n) ? s.toLowerCase() : n;
+    const raw = String(s).replace(/[^0-9.\-]/g, '');
+    // Format id-ID: titik = pemisah ribuan ('501.234', '1.234.567'), bukan desimal.
+    // Pola ini aman karena ROAS/CTR tampil 2 desimal ('0.75', '2.14') sehingga tidak kena.
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(raw)) return parseFloat(raw.replace(/\./g, ''));
+    const n = parseNum(raw);
+    return isNaN(n) ? String(s).toLowerCase() : n;
   };
 
   rows.sort((a, b) => {
@@ -1631,7 +1664,7 @@ function loadDemoData() {
   showLoading('Memuat demo data...');
 
   const campaigns = ['cp01', 'cp02', 'cp03', 'cp04', 'cp05'];
-  const statuses  = ['Tertunda', 'Tertunda', 'Tertunda', 'Selesai', 'Selesai', 'Dibatalkan'];
+  const statuses  = ['Tertunda', 'Tertunda', 'Tertunda', 'Selesai', 'Selesai', 'Dibatalkan', 'Belum Dibayar'];
   const products  = [
     ['Robot Flashdisk 32GB', 'Komputer & Aksesoris', 63500],
     ['Charger Dual 2A Robot', 'Handphone & Aksesoris', 55000],

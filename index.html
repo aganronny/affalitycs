@@ -112,6 +112,9 @@
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:#64748b;margin:0 10px;cursor:pointer;">
             <input type="checkbox" id="ppn-toggle" onchange="applyFilters()" style="cursor:pointer;" /> +PPN 11% (FB)
           </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:#64748b;margin:0 10px;cursor:pointer;" title="Order berstatus Belum Dibayar / Dibatalkan / Dikembalikan tidak dihitung sebagai pesanan">
+            <input type="checkbox" id="valid-orders-toggle" checked onchange="applyFilters()" style="cursor:pointer;" /> Order valid saja
+          </label>
           <button class="btn-ghost" onclick="resetFilters()">Reset</button>
           <button class="btn-ghost" onclick="openMapping()">⚙️ Mapping</button>
           <button class="btn-ghost danger" onclick="resetAll()">↩️ Upload Ulang</button>
@@ -370,6 +373,6 @@
   <!-- SCRIPTS -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=20260414"></script>
+  <script src="app.js?v=20260829"></script>
 </body>
 </html>
