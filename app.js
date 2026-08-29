@@ -1538,15 +1538,18 @@ function renderClickInsights() {
     if (!isNaN(h) && h >= 0 && h <= 23) byHour[h]++;
   });
   const maxHour = Math.max(...byHour);
+  const maxOrders = Math.max(...ordersByHour);
   destroyChart('hours');
   const hourCanvas = ensureCanvas(hourWrap);
   const hourDatasets = [
     { label: 'Klik', data: byHour, backgroundColor: byHour.map(v => maxHour > 0 && v === maxHour ? '#1d4ed8' : '#3b82f6'), borderRadius: 3 }
   ];
   if (hasOrders) {
-    hourDatasets.push({ type: 'line', label: 'Order', data: ordersByHour,
-      borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.12)', borderWidth: 2.5,
-      pointRadius: 3, pointHoverRadius: 5, tension: 0.3, fill: true });
+    hourDatasets.push({ type: 'line', label: 'Order', data: ordersByHour, yAxisID: 'y2',
+      borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.15)', borderWidth: 2.5,
+      pointRadius: 4, pointHoverRadius: 6, tension: 0.3, fill: true,
+      datalabels: { display: true, align: 'top', offset: 2, color: '#10b981',
+        font: { size: 10, weight: 700 }, formatter: (v) => v > 0 ? v : '' } });
   }
   state.charts['hours'] = new Chart(hourCanvas, {
     type: 'bar',
@@ -1556,12 +1559,16 @@ function renderClickInsights() {
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false }, // tooltip nampilin Klik + Order sekaligus
       plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => {
         const total = ctx.dataset.data[ctx.dataIndex];
         return `${ctx.dataset.label}: ${fmt(total)}`;
       } } } },
       scales: {
-        y: { beginAtZero: true, title: { display: true, text: 'Jumlah' } },
+        y: { beginAtZero: true, title: { display: true, text: 'Klik' } },
+        y2: hasOrders ? { position: 'right', beginAtZero: true, suggestedMax: Math.max(4, maxOrders + 1),
+          title: { display: true, text: 'Order' }, grid: { drawOnChartArea: false },
+          ticks: { precision: 0, color: '#10b981' } } : undefined,
         x: { title: { display: true, text: 'Jam (00-23)' } }
       }
     }
