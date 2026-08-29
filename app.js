@@ -1565,12 +1565,13 @@ function renderFbBreakdown() {
 
   const agg = (keyFn, order) => {
     const m = {};
+    const ppn = document.getElementById('ppn-toggle')?.checked ? 1.11 : 1; // konsisten dgn spend di metrik lain
     bd.forEach(r => {
       const k = keyFn(r);
       if (!k) return;
       if (!m[k]) m[k] = { clicks: 0, spent: 0 };
       m[k].clicks += r.linkClicks;
-      m[k].spent += r.spent;
+      m[k].spent += r.spent * ppn;
     });
     let entries = Object.entries(m);
     if (order) entries.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
