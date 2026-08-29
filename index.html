@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Affalitycs — Shopee Affiliate × Facebook Ads Dashboard</title>
+  <meta name="description" content="Tool analisis ROAS dan profitabilitas untuk Shopee Affiliate yang menggunakan Facebook Ads. Upload dua file, langsung dapat insight." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=20260415" />
+</head>
+<body>
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="container">
+      <div class="logo">
+        <span class="logo-icon">📊</span>
+        <span class="logo-text">Affalitycs</span>
+        <span class="logo-badge">Beta</span>
+      </div>
+      <div class="header-meta">
+        <span id="last-updated" class="header-date"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- UPLOAD SECTION -->
+  <section id="section-upload" class="section-upload">
+    <div class="container">
+      <div class="upload-hero">
+        <h1>Analisis <span class="accent">Iklan Facebook</span> × <span class="accent2">Komisi Shopee</span></h1>
+        <p class="upload-subtitle">Upload laporan harian atau akumulasi, langsung tahu campaign mana yang untung dan mana yang harus dimatikan.</p>
+      </div>
+
+      <div class="upload-grid">
+        <!-- Shopee Affiliate CSV -->
+        <div class="upload-card" id="drop-shopee">
+          <div class="upload-icon">🛍️</div>
+          <div class="upload-label">Shopee Affiliate Report</div>
+          <div class="upload-hint">File CSV dari Shopee Affiliate (bisa lebih dari 1 file)</div>
+          <input type="file" id="file-shopee" accept=".csv" multiple hidden />
+          <button class="btn-upload" onclick="document.getElementById('file-shopee').click()">Pilih File CSV</button>
+          <div class="upload-status" id="status-shopee">Belum ada file</div>
+        </div>
+
+        <!-- Facebook Ads XLSX / XLS / CSV -->
+        <div class="upload-card" id="drop-fb">
+          <div class="upload-icon">📘</div>
+          <div class="upload-label">Facebook Ads Report</div>
+          <div class="upload-hint">File XLSX, XLS, atau CSV dari Meta Ads Manager (bisa lebih dari 1 file)</div>
+          <input type="file" id="file-fb" accept=".xlsx,.xls,.csv" multiple hidden />
+          <button class="btn-upload" onclick="document.getElementById('file-fb').click()">Pilih File</button>
+          <div class="upload-status" id="status-fb">Belum ada file</div>
+          <div class="upload-format-tags">
+            <span class="format-tag xlsx">XLSX</span>
+            <span class="format-tag xls">XLS</span>
+            <span class="format-tag csv">CSV</span>
+          </div>
+        </div>
+
+        <!-- Shopee Website Click Report -->
+        <div class="upload-card" id="drop-clicks">
+          <div class="upload-icon">🖱️</div>
+          <div class="upload-label">Shopee Click Report</div>
+          <div class="upload-hint">Website Click Report dari Shopee Affiliate (opsional, CSV)</div>
+          <input type="file" id="file-clicks" accept=".csv" multiple hidden />
+          <button class="btn-upload" onclick="document.getElementById('file-clicks').click()">Pilih File CSV</button>
+          <div class="upload-status" id="status-clicks">Belum ada file</div>
+          <div class="upload-format-tags">
+            <span class="format-tag csv">CSV</span>
+            <span class="format-tag" style="background:rgba(139,92,246,0.15);color:#8b5cf6">OPSIONAL</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="upload-actions">
+        <button class="btn-analyze" id="btn-analyze" disabled onclick="runAnalysis()">
+          <span>Mulai Analisis</span>
+          <span class="btn-arrow">→</span>
+        </button>
+        <button class="btn-demo" onclick="loadDemoData()">Coba dengan Sample Data</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAPPING MODAL -->
+  <div id="mapping-modal" class="modal-overlay" style="display:none">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2>🔗 Mapping Campaign</h2>
+        <p>Beberapa <code>Tag_link3</code> dari Shopee tidak cocok dengan nama campaign di Facebook Ads. Tentukan pasangannya di bawah ini. Mapping akan disimpan untuk sesi berikutnya.</p>
+      </div>
+      <div id="mapping-rows" class="mapping-rows"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick="skipMapping()">Lewati (Gunakan Tag Apa Adanya)</button>
+        <button class="btn-primary" onclick="applyMapping()">Terapkan Mapping →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <section id="section-dashboard" class="section-dashboard" style="display:none">
+    <div class="container">
+
+      <!-- Date Filter Bar -->
+      <div class="filter-bar">
+        <div class="filter-title">📅 Rentang Tanggal</div>
+        <div class="filter-controls">
+          <input type="date" id="filter-start" class="date-input" onchange="applyFilters()" />
+          <span class="filter-sep">—</span>
+          <input type="date" id="filter-end" class="date-input" onchange="applyFilters()" />
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:#64748b;margin:0 10px;cursor:pointer;">
+            <input type="checkbox" id="ppn-toggle" onchange="applyFilters()" style="cursor:pointer;" /> +PPN 11% (FB)
+          </label>
+          <button class="btn-ghost" onclick="resetFilters()">Reset</button>
+          <button class="btn-ghost" onclick="openMapping()">⚙️ Mapping</button>
+          <button class="btn-ghost danger" onclick="resetAll()">↩️ Upload Ulang</button>
+        </div>
+      </div>
+
+      <!-- INSIGHT BAR -->
+      <div id="insight-bar" class="insight-bar" style="display:none"></div>
+
+      <!-- KPI CARDS -->
+      <div class="kpi-grid" id="kpi-grid"></div>
+
+      <!-- TABS -->
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="campaign" onclick="switchTab('campaign', this)">📊 Per Campaign</button>
+        <button class="tab-btn" data-tab="product" onclick="switchTab('product', this)">📦 Per Produk</button>
+        <button class="tab-btn" data-tab="comparison" onclick="switchTab('comparison', this)">⚖️ Perbandingan</button>
+        <button class="tab-btn" data-tab="trend" onclick="switchTab('trend', this)">📅 Tren Harian</button>
+        <button class="tab-btn" data-tab="status" onclick="switchTab('status', this)">📋 Status Pesanan</button>
+        <button class="tab-btn" data-tab="decision" onclick="switchTab('decision', this)">🎯 Rekomendasi</button>
+      </div>
+
+      <!-- TAB: CAMPAIGN -->
+      <div id="tab-campaign" class="tab-content active">
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">ROAS per Campaign <span class="chart-hint">(Komisi / Biaya Iklan)</span></div>
+            <div class="chart-wrap" id="chart-roas"></div>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">Revenue vs Spend</div>
+            <div class="chart-wrap" id="chart-revenue-spend"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Profit / Loss per Campaign</div>
+            <div class="chart-wrap" id="chart-profit"></div>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">Detail per Campaign</div>
+            <input type="text" class="table-search" placeholder="Cari campaign..." id="search-campaign" oninput="filterCampaignTable()" />
+          </div>
+          <div class="table-wrap">
+            <table id="tbl-campaign">
+              <thead>
+                <tr>
+                  <th onclick="sortTable('tbl-campaign',0)">Campaign ↕</th>
+                  <th onclick="sortTable('tbl-campaign',1)">Spend (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-campaign',2)">Orders ↕</th>
+                  <th onclick="sortTable('tbl-campaign',3)">Komisi (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-campaign',4)">Profit (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-campaign',5)">ROAS ↕</th>
+                  <th onclick="sortTable('tbl-campaign',6)">CPO (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-campaign',7)">Impresi ↕</th>
+                  <th onclick="sortTable('tbl-campaign',8)">Klik ↕</th>
+                  <th onclick="sortTable('tbl-campaign',9)">CTR ↕</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-campaign"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: PRODUCT -->
+      <div id="tab-product" class="tab-content">
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">Top 15 Produk Terlaris (berdasarkan Orders)</div>
+            <div class="chart-wrap tall" id="chart-top-product"></div>
+          </div>
+        </div>
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">Detail per Produk</div>
+            <input type="text" class="table-search" placeholder="Cari produk..." id="search-product" oninput="filterProductTable()" />
+          </div>
+          <div class="table-wrap">
+            <table id="tbl-product">
+              <thead>
+                <tr>
+                  <th onclick="sortTable('tbl-product',0)">Nama Produk ↕</th>
+                  <th onclick="sortTable('tbl-product',1)">Kategori ↕</th>
+                  <th onclick="sortTable('tbl-product',2)">Orders ↕</th>
+                  <th onclick="sortTable('tbl-product',3)">Total Nilai (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-product',4)">Komisi (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-product',5)">Campaign</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-product"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: COMPARISON -->
+      <div id="tab-comparison" class="tab-content">
+        <div class="comparison-intro">
+          <div class="comparison-intro-icon">⚖️</div>
+          <div>
+            <h3>Perbandingan FB Ads vs Shopee Affiliate</h3>
+            <p>Lihat korelasi antara performa iklan Facebook dengan hasil komisi Shopee per campaign. Identifikasi bottleneck di funnel.</p>
+          </div>
+        </div>
+
+        <!-- Scatter Plot CTR vs ROAS -->
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">Scatter Plot: CTR vs ROAS <span class="chart-hint">(ukuran bubble = total spend)</span></div>
+            <div class="chart-wrap" id="chart-scatter"></div>
+          </div>
+        </div>
+
+        <!-- Click Loss Analysis -->
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">🔍 Funnel Klik: FB Ads → Masuk Shopee → Order
+              <span class="chart-hint">(biru = klik iklan, ungu = klik masuk Shopee, hijau = order)</span>
+            </div>
+            <div id="click-loss-summary" class="click-loss-summary" style="display:none"></div>
+            <div class="chart-wrap" id="chart-click-loss"></div>
+          </div>
+        </div>
+
+        <!-- Click Comparison: FB Klik vs Shopee Orders -->
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">📊 Drop-off Analysis per Campaign <span class="chart-hint">(% hilang di setiap tahap funnel)</span></div>
+            <div class="chart-wrap" id="chart-click-compare"></div>
+          </div>
+        </div>
+
+        <!-- Funnel per Campaign -->
+        <div class="chart-card" style="margin-bottom:16px">
+          <div class="chart-title-row">
+            <div class="chart-title">📊 Conversion Funnel per Campaign</div>
+            <select id="funnel-campaign-select" class="funnel-select" onchange="renderFunnel()">
+              <option value="">— Pilih Campaign —</option>
+            </select>
+          </div>
+          <div id="funnel-container" class="funnel-container">
+            <div class="funnel-placeholder">Pilih campaign di atas untuk melihat funnel konversi</div>
+          </div>
+        </div>
+
+        <!-- Comparison Table -->
+        <div class="table-card">
+          <div class="table-header">
+            <div class="table-title">Tabel Perbandingan Lengkap</div>
+            <input type="text" class="table-search" placeholder="Cari campaign..." id="search-comparison" oninput="filterComparisonTable()" />
+          </div>
+          <div class="table-wrap">
+            <table id="tbl-comparison">
+              <thead>
+                <tr>
+                  <th rowspan="2" onclick="sortTable('tbl-comparison',0)" class="th-merged">Campaign ↕</th>
+                  <th colspan="5" class="th-group th-group-fb">📘 Facebook Ads</th>
+                  <th colspan="8" class="th-group th-group-shopee">🛍️ Shopee Affiliate</th>
+                </tr>
+                <tr>
+                  <th onclick="sortTable('tbl-comparison',1)">Impresi ↕</th>
+                  <th onclick="sortTable('tbl-comparison',2)">Klik FB ↕</th>
+                  <th onclick="sortTable('tbl-comparison',3)" title="Jumlah klik yang benar-benar masuk ke Shopee (dari Click Report atau LPV)">Klik Masuk Shopee ↕</th>
+                  <th onclick="sortTable('tbl-comparison',4)" title="Persentase klik FB yang hilang sebelum masuk ke Shopee">% Drop Klik→Shopee ↕</th>
+                  <th onclick="sortTable('tbl-comparison',5)">CTR ↕</th>
+                  <th onclick="sortTable('tbl-comparison',6)">Spend ↕</th>
+                  <th onclick="sortTable('tbl-comparison',7)">Orders ↕</th>
+                  <th onclick="sortTable('tbl-comparison',8)">Conv. Rate ↕</th>
+                  <th onclick="sortTable('tbl-comparison',9)" title="Berapa klik FB yang dibutuhkan per 1 order Shopee">Klik/Order ↕</th>
+                  <th onclick="sortTable('tbl-comparison',10)">CPO ↕</th>
+                  <th onclick="sortTable('tbl-comparison',11)">Komisi ↕</th>
+                  <th onclick="sortTable('tbl-comparison',12)">ROAS ↕</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-comparison"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: TREND -->
+      <div id="tab-trend" class="tab-content">
+        <div class="trend-intro">
+          <span>📅</span>
+          <div>
+            <h3>Tren Harian</h3>
+            <p>Grafik orders dan komisi per hari dari data Shopee Affiliate. Identifikasi lonjakan, penurunan, atau pola mingguan.</p>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">Orders per Hari (per Campaign)</div>
+            <div class="chart-wrap" id="chart-trend-orders"></div>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">Komisi Kumulatif per Hari <span class="chart-hint">(Rp)</span></div>
+            <div class="chart-wrap" id="chart-trend-komisi"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: STATUS -->
+      <div id="tab-status" class="tab-content">
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">Distribusi Status Pesanan</div>
+            <div class="chart-wrap" id="chart-status-pie"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">Komisi per Status</div>
+            <div class="chart-wrap" id="chart-status-komisi"></div>
+          </div>
+        </div>
+        <div class="status-summary-grid" id="status-summary-grid"></div>
+      </div>
+
+      <!-- TAB: REKOMENDASI -->
+      <div id="tab-decision" class="tab-content">
+        <div class="decision-intro">
+          <div class="decision-intro-icon">🤖</div>
+          <div>
+            <h3>Rekomendasi Otomatis</h3>
+            <p>Berdasarkan ROAS, CPO, dan data komisi, berikut aksi yang disarankan untuk setiap campaign:</p>
+          </div>
+        </div>
+        <div id="decision-cards" class="decision-cards"></div>
+        <div class="breakeven-card" id="breakeven-section">
+          <h3>📐 Break-even Calculator</h3>
+          <p>Berapa minimum ROAS agar campaign tidak rugi?</p>
+          <div class="breakeven-form">
+            <label>Budget Harian (Rp) <input type="number" id="be-budget" value="25000" oninput="calcBreakeven()" /></label>
+            <label>Rata-rata Komisi per Order (Rp) <input type="number" id="be-komisi" value="5000" oninput="calcBreakeven()" /></label>
+            <label>Target Profit (Rp) <input type="number" id="be-profit" value="0" oninput="calcBreakeven()" /></label>
+          </div>
+          <div id="be-result" class="be-result"></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loading-overlay" style="display:none" class="loading-overlay">
+    <div class="loading-box">
+      <div class="loading-spinner"></div>
+      <div class="loading-text" id="loading-text">Memproses data...</div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js?v=20260414"></script>
+</body>
+</html>
