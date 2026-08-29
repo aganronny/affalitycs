@@ -10,7 +10,7 @@ Dashboard analisis **Shopee Affiliate × Facebook Ads** untuk menghitung ROAS, p
    - **Facebook Ads Report** (XLSX/XLS/CSV dari Meta Ads Manager, bisa banyak file)
    - **Shopee Website Click Report** (CSV klik, opsional — untuk funnel akurat)
 3. Klik "Mulai Analisis" → kalau ada tag Shopee yang gak match nama campaign FB, muncul modal mapping
-4. Dashboard tampil dengan 6 tab: Per Campaign, Per Produk, Perbandingan (funnel), Tren Harian, Status Pesanan, Rekomendasi
+4. Dashboard tampil dengan 5 tab: Per Campaign, Per Produk, Perbandingan (funnel + scatter), Tren Harian, Rekomendasi
 
 Tombol "Coba dengan Sample Data" memuat data demo yang di-generate di dalam `loadDemoData()` (app.js).
 
@@ -18,7 +18,7 @@ Tombol "Coba dengan Sample Data" memuat data demo yang di-generate di dalam `loa
 
 | File | Isi |
 |---|---|
-| `index.html` | UI tunggal: upload, banner lanjutkan sesi, modal mapping, dashboard 6 tab, loading overlay |
+| `index.html` | UI tunggal: upload, banner lanjutkan sesi, modal mapping, dashboard 5 tab, loading overlay |
 | `parsers.js` | Lapisan data murni (tanpa DOM): format angka, parsing CSV/XLSX, matching tag→campaign, breakdown FB Ads. Bisa dites via Node |
 | `app.js` | SEMUA logika UI (±1560 baris, v2.5): state, upload, filter, render semua chart & tabel, export CSV/PNG, persistensi sesi |
 | `style.css` | Styling lengkap (tema terang, Inter font) |
@@ -42,7 +42,7 @@ Alur data: **Upload → Parse → Matching → Filter → Render**
 2. **Matching tag → campaign** (`resolveShopeeKey`): urutan = manual mapping → exact → normalized → partial → fallback tag mentah
 3. **Filter** (`applyFilters`): rentang tanggal + toggle **PPN 11%** (FB spend × 1.11) + toggle **Order valid saja** (default ON: status Belum Dibayar/Dibatalkan/Dikembalikan tidak dihitung sebagai pesanan). Kalau FB data ter-agregat (tanpa kolom tanggal), spend diprorata pakai `dateRatio` (rasio jumlah hari)
 4. **Merge** (`buildCampaignData`): gabung Shopee + FB + Click Report per campaign, hitung ROAS/CPO/profit/funnel 3 tahap
-5. **Render**: `renderAll()` memanggil 8 fungsi render (KPI, insight, 6 tab), masing-masing dibungkus try/catch biar satu error gak mematikan dashboard
+5. **Render**: `renderAll()` memanggil fungsi render (KPI, Smart Report, 4 tab, sanity, riwayat, breakdown), masing-masing dibungkus try/catch biar satu error gak mematikan dashboard
 
 Metrik inti:
 - `ROAS = komisi bersih / spend FB`
@@ -52,7 +52,7 @@ Metrik inti:
 - Click report di-dedup by `clickId` saat upload multi-file (aman dari periode overlap)
 - `parseSpent` khusus kolom FB spend: '18.415' = delapan belas ribu (guard format id-ID). `parseNum` global sengaja TIDAK diubah — nilai Shopee 3 desimal ('962.745') harus tetap kebaca desimal
 
-Aturan rekomendasi otomatis (tab Rekomendasi): ROAS ≥3 SCALE UP, ≥2 SCALE, ≥1.2 MAINTAIN, ≥0.8 MONITOR, <0.8 PAUSE.
+Aturan rekomendasi (tab Rekomendasi) — urutan evaluasi: (1) tanpa FB & tanpa spend = NO DATA, (2) FB ada tapi spend 0 = NONAKTIF, (3) order ≥1 tapi komisi 0 = GANTI PRODUK, (4) order 0 = PAUSE, (5) order <3 & periode <7 hari = DATA TIPIS (jangan ambil keputusan dulu), (6) ladder ROAS: ≥3 SCALE UP, ≥2 SCALE, ≥1.2 MAINTAIN, ≥0.8 MONITOR, <0.8 PAUSE. Ekstra: komisi/order < Rp 300 = hint butuh volume besar.
 
 Fitur tambahan v2.3:
 - Tab Perbandingan punya chart **Klik per Negara** (top 10, dari Wilayah Klik) & **Klik per Jam** (00-23) — keduanya butuh Click Report
@@ -71,9 +71,13 @@ Fitur v2.6 (guard & riwayat):
 - **Riwayat snapshot** per periode (IndexedDB store `history`, key `start|end`, di-save tiap applyFilters): chart **Perjalanan ROAS** di tab Tren Harian + baris "vs periode sebelumnya" di Smart Report (ROAS/spend/komisi vs snapshot terakhir yang end-nya sebelum periode sekarang)
 - **Checklist aksi** di tab Rekomendasi (localStorage `affalitycs_action_checks`): centang campaign yang udah dieksekusi; auto-hapus kalau rekomendasi campaign berubah atau campaign hilang dari data
 - **Komisi/1k Klik** di tabel Perbandingan (kolom baru — thead Shopee colspan jadi pas 8)
-- **Prefill breakeven**: tombol "⟳ Pakai rata-rata data" isi budget harian & komisi/order dari data asli
 - **🖨️ Cetak / PDF**: window.print() + `@media print` (sembunyikan filter/tab/upload, cetak Smart Report + KPI + tab aktif)
 - **Mobile responsive**: `@media (max-width: 768px)` — KPI 2 kolom, chart 1 kolom, tabel scroll horizontal
+
+Fitur v3.0 (penyederhanaan & rules cerdas):
+- **5 tab saja** (Status Pesanan dihapus — datanya tetap ada di Smart Report & export Excel); banner intro dekoratif dihapus; funnel-per-campaign dihapus (duplikat funnel 3 tahap); breakeven calculator manual dihapus (digantikan BEP otomatis per campaign)
+- **Rekomendasi punya gerbang data**: DATA TIPIS (order <3 & periode <7 hari) cegah keputusan prematur; GANTI PRODUK (order ada tapi komisi 0%) beda dari PAUSE; NONAKTIF buat campaign delivery inactive
+- Scatter CTR vs ROAS dapat **garis referensi break-even 1x** + hint kuadran di judul chart
 
 Fitur v2.9 (range picker):
 - **Filter tanggal 1 tombol**: klik → dropdown berisi preset sekali-klik (Hari terakhir / 7 hari / 30 hari / Semua data — anchor-nya tanggal data terakhir, bukan hari ini) + kalender mini (mulai Senin). Klik awal → klik akhir → otomatis apply

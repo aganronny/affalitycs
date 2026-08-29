@@ -15,7 +15,7 @@
       <div class="logo">
         <span class="logo-icon">📊</span>
         <span class="logo-text">Affalitycs</span>
-        <span class="logo-badge">v2.9</span>
+        <span class="logo-badge">v3.0</span>
       </div>
       <div class="header-meta">
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Ganti tema terang/gelap">🌙</button>
@@ -152,7 +152,6 @@
         <button class="tab-btn" data-tab="product" onclick="switchTab('product', this)">📦 Per Produk</button>
         <button class="tab-btn" data-tab="comparison" onclick="switchTab('comparison', this)">⚖️ Perbandingan</button>
         <button class="tab-btn" data-tab="trend" onclick="switchTab('trend', this)">📅 Tren Harian</button>
-        <button class="tab-btn" data-tab="status" onclick="switchTab('status', this)">📋 Status Pesanan</button>
         <button class="tab-btn" data-tab="decision" onclick="switchTab('decision', this)">🎯 Rekomendasi</button>
       </div>
 
@@ -225,18 +224,10 @@
 
       <!-- TAB: COMPARISON -->
       <div id="tab-comparison" class="tab-content">
-        <div class="comparison-intro">
-          <div class="comparison-intro-icon">⚖️</div>
-          <div>
-            <h3>Perbandingan FB Ads vs Shopee Affiliate</h3>
-            <p>Lihat korelasi antara performa iklan Facebook dengan hasil komisi Shopee per campaign. Identifikasi bottleneck di funnel.</p>
-          </div>
-        </div>
-
         <!-- Scatter Plot CTR vs ROAS -->
         <div class="chart-row">
           <div class="chart-card wide">
-            <div class="chart-title">Scatter Plot: CTR vs ROAS <span class="chart-hint">(ukuran bubble = total spend)</span></div>
+            <div class="chart-title">Scatter Plot: CTR vs ROAS <span class="chart-hint">(di atas garis putus = profit · kiri bawah = kreatif lemah · kanan bawah = produk/harga bermasalah)</span></div>
             <div class="chart-wrap" id="chart-scatter"></div>
           </div>
         </div>
@@ -294,19 +285,6 @@
           </div>
         </div>
 
-        <!-- Funnel per Campaign -->
-        <div class="chart-card" style="margin-bottom:16px">
-          <div class="chart-title-row">
-            <div class="chart-title">📊 Conversion Funnel per Campaign</div>
-            <select id="funnel-campaign-select" class="funnel-select" onchange="renderFunnel()">
-              <option value="">— Pilih Campaign —</option>
-            </select>
-          </div>
-          <div id="funnel-container" class="funnel-container">
-            <div class="funnel-placeholder">Pilih campaign di atas untuk melihat funnel konversi</div>
-          </div>
-        </div>
-
         <!-- Comparison Table -->
         <div class="table-card">
           <div class="table-header">
@@ -345,13 +323,6 @@
 
       <!-- TAB: TREND -->
       <div id="tab-trend" class="tab-content">
-        <div class="trend-intro">
-          <span>📅</span>
-          <div>
-            <h3>Tren Harian</h3>
-            <p>Grafik orders dan komisi per hari dari data Shopee Affiliate. Identifikasi lonjakan, penurunan, atau pola mingguan.</p>
-          </div>
-        </div>
         <div class="chart-row">
           <div class="chart-card wide">
             <div class="chart-title">Orders per Hari (per Campaign)</div>
@@ -374,38 +345,9 @@
         </div>
       </div>
 
-      <!-- TAB: STATUS -->
-      <div id="tab-status" class="tab-content">
-        <div class="chart-row">
-          <div class="chart-card wide">
-            <div class="chart-title">Distribusi Status Pesanan</div>
-            <div class="chart-wrap" id="chart-status-pie"></div>
-          </div>
-        </div>
-        <div class="status-summary-grid" id="status-summary-grid"></div>
-      </div>
-
       <!-- TAB: REKOMENDASI -->
       <div id="tab-decision" class="tab-content">
-        <div class="decision-intro">
-          <div class="decision-intro-icon">🤖</div>
-          <div>
-            <h3>Rekomendasi Otomatis</h3>
-            <p>Berdasarkan ROAS, CPO, dan data komisi, berikut aksi yang disarankan untuk setiap campaign:</p>
-          </div>
-        </div>
         <div id="decision-cards" class="decision-cards"></div>
-        <div class="breakeven-card" id="breakeven-section">
-          <h3>📐 Break-even Calculator</h3>
-          <p>Berapa minimum ROAS agar campaign tidak rugi?</p>
-          <div class="breakeven-form">
-            <label>Budget Harian (Rp) <input type="number" id="be-budget" value="25000" oninput="calcBreakeven()" /></label>
-            <label>Rata-rata Komisi per Order (Rp) <input type="number" id="be-komisi" value="5000" oninput="calcBreakeven()" /></label>
-            <label>Target Profit (Rp) <input type="number" id="be-profit" value="0" oninput="calcBreakeven()" /></label>
-            <button class="btn-ghost" type="button" onclick="prefillBreakeven()" title="Isi otomatis dari rata-rata data yang lagi dianalisis">⟳ Pakai rata-rata data</button>
-          </div>
-          <div id="be-result" class="be-result"></div>
-        </div>
       </div>
 
     </div>
@@ -424,6 +366,6 @@
   <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="parsers.js?v=20260829c"></script>
-  <script src="app.js?v=20260829i"></script>
+  <script src="app.js?v=20260829j"></script>
 </body>
 </html>

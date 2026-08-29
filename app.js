@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v2.9 - Agustus 2026
+   v3.0 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -648,7 +648,6 @@ function buildDashboard(opts = {}) {
     document.getElementById('section-upload').style.display = 'none';
     document.getElementById('section-dashboard').style.display = 'block';
     hideLoading();
-    calcBreakeven();
   }, 100);
 }
 
@@ -742,7 +741,6 @@ function renderAll() {
   try { renderProductTab(); } catch(e) { console.warn('renderProductTab:', e); }
   try { renderComparisonTab(); } catch(e) { console.warn('renderComparisonTab:', e); }
   try { renderTrendTab(); } catch(e) { console.warn('renderTrendTab:', e); }
-  try { renderStatusTab(); } catch(e) { console.warn('renderStatusTab:', e); }
   try { renderDecisionTab(); } catch(e) { console.warn('renderDecisionTab:', e); }
   try { renderClickInsights(); } catch(e) { console.warn('renderClickInsights:', e); }
   try { renderFbBreakdown(); } catch(e) { console.warn('renderFbBreakdown:', e); }
@@ -1114,6 +1112,7 @@ function renderComparisonTab() {
     const hasFb = campaigns.filter(c => c.fb && c.fb.ctr > 0 && c.roas !== null);
     if (hasFb.length > 0) {
       const maxSpend  = Math.max(...hasFb.map(c => c.spent), 1);
+      const xMax = Math.max(...hasFb.map(c => c.fb.ctr), 3) * 1.2;
       const scatterData = hasFb.map(c => ({
         x: parseFloat(c.fb.ctr.toFixed(2)),
         y: parseFloat(c.roas.toFixed(4)),
@@ -1122,10 +1121,16 @@ function renderComparisonTab() {
       }));
       state.charts['scatter'] = new Chart(canvas, {
         type: 'bubble',
-        data: { datasets: [{ label: 'Campaign', data: scatterData,
-          backgroundColor: scatterData.map(d => d.roas >= 2 ? 'rgba(16,185,129,0.6)' : d.roas >= 1 ? 'rgba(245,158,11,0.6)' : 'rgba(239,68,68,0.6)'),
-          borderColor:     scatterData.map(d => d.roas >= 2 ? '#10b981' : d.roas >= 1 ? '#f59e0b' : '#ef4444'),
-          borderWidth: 2 }] },
+        data: { datasets: [
+          { label: 'Campaign', data: scatterData,
+            backgroundColor: scatterData.map(d => d.roas >= 2 ? 'rgba(16,185,129,0.6)' : d.roas >= 1 ? 'rgba(245,158,11,0.6)' : 'rgba(239,68,68,0.6)'),
+            borderColor:     scatterData.map(d => d.roas >= 2 ? '#10b981' : d.roas >= 1 ? '#f59e0b' : '#ef4444'),
+            borderWidth: 2 },
+          { type: 'line', label: 'Break-even (1x)',
+            data: [{ x: 0, y: 1 }, { x: xMax, y: 1 }],
+            borderColor: '#94a3b8', borderDash: [6, 4], borderWidth: 2, pointRadius: 0, fill: false,
+            datalabels: { display: false } }
+        ] },
         options: {
           responsive: true, maintainAspectRatio: false,
           animation: { onComplete(anim) {
@@ -1142,7 +1147,7 @@ function renderComparisonTab() {
             label: (ctx) => { const d=ctx.raw; return [`CTR: ${d.ctr.toFixed(2)}%`,`ROAS: ${d.roas.toFixed(2)}x`,`Spend: Rp${fmtK(d.spent)}`]; }
           }}},
           scales: {
-            x: { title: { display:true, text:'CTR Facebook Ads (%)' }, ticks: { callback: v => v+'%' } },
+            x: { min: 0, suggestedMax: 8, title: { display:true, text:'CTR Facebook Ads (%)' }, ticks: { callback: v => v+'%' } },
             y: { title: { display:true, text:'ROAS (Komisi / Spend)' }, ticks: { callback: v => parseFloat(v).toFixed(2)+'x' } }
           }
         }
@@ -1205,15 +1210,6 @@ function renderComparisonTab() {
       ctxLoss.innerHTML = '<div class="chart-empty">Upload file FB Ads untuk melihat funnel klik.</div>';
     }
   }
-
-  // -- Funnel Select --
-  const sel = document.getElementById('funnel-campaign-select');
-  const currentVal = sel.value;
-  sel.innerHTML = '<option value="">- Pilih Campaign -</option>' +
-    campaigns.filter(c => c.fb).map(c =>
-      `<option value="${esc(c.name)}" ${currentVal===c.name?'selected':''}>${esc(c.name)}</option>`
-    ).join('');
-  if (sel.value) renderFunnel();
 
   // -- Funnel Summary Cards (3 Tahap) --
   const clSummary = document.getElementById('click-loss-summary');
@@ -1293,68 +1289,6 @@ function renderComparisonTab() {
       <td class="${roasClass}">${roasTxt}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="13" class="no-data">Tidak ada data</td></tr>';
-}
-
-function renderFunnel() {
-  const sel       = document.getElementById('funnel-campaign-select');
-  const name      = sel.value;
-  const container = document.getElementById('funnel-container');
-
-  if (!name) {
-    container.innerHTML = '<div class="funnel-placeholder">Pilih campaign di atas untuk melihat funnel konversi</div>';
-    return;
-  }
-
-  const c = buildCampaignData().find(x => x.name === name);
-  if (!c) return;
-
-  const impressions = c.fb ? c.fb.impressions : 0;
-  const clicks      = c.fb ? c.fb.linkClicks  : 0;
-  const orders      = c.orders;
-  const spent       = c.spent;
-
-  const ctr      = impressions > 0 ? (clicks  / impressions * 100).toFixed(1) : '-';
-  const convRate = clicks > 0      ? (orders  / clicks  * 100).toFixed(1)     : '-';
-  const roas     = c.roas !== null ? c.roas.toFixed(2) + 'x' : '-';
-
-  const clickPct = impressions > 0 ? Math.max(10, (clicks / impressions) * 100) : 0;
-  const orderPct = clicks > 0 ? Math.max(5, (orders / clicks) * clickPct)       : 0;
-
-  container.innerHTML = `
-    <div class="funnel-wrapper">
-      <div class="funnel-step">
-        <div class="funnel-bar fb-bar" style="width:100%">
-          <span class="funnel-bar-label">Tayangan (Impressi)</span>
-          <span class="funnel-bar-value">${fmt(impressions)}</span>
-        </div>
-        <div class="funnel-meta">Budget terpakai: <strong>Rp${fmt(spent)}</strong></div>
-      </div>
-      <div class="funnel-arrow">v CTR: <strong>${ctr}%</strong></div>
-      <div class="funnel-step">
-        <div class="funnel-bar fb-bar-2" style="width:${clickPct}%">
-          <span class="funnel-bar-label">Klik Tautan</span>
-          <span class="funnel-bar-value">${fmt(clicks)}</span>
-        </div>
-        <div class="funnel-meta">CPC rata-rata: <strong>Rp${c.fb ? fmt(c.fb.cpc) : '-'}</strong></div>
-      </div>
-      <div class="funnel-arrow">v Conv. Rate: <strong>${convRate}%</strong></div>
-      <div class="funnel-step">
-        <div class="funnel-bar shopee-bar" style="width:${Math.max(5, orderPct)}%">
-          <span class="funnel-bar-label">Order Masuk</span>
-          <span class="funnel-bar-value">${orders}</span>
-        </div>
-        <div class="funnel-meta">CPO: <strong>${c.cpo !== null ? 'Rp' + fmt(c.cpo) : '-'}</strong></div>
-      </div>
-      <div class="funnel-arrow">v Komisi</div>
-      <div class="funnel-step">
-        <div class="funnel-bar komisi-bar" style="width:${Math.max(5, orderPct * 0.8)}%">
-          <span class="funnel-bar-label">Komisi Bersih</span>
-          <span class="funnel-bar-value">Rp${fmt(c.komisi)}</span>
-        </div>
-        <div class="funnel-meta">ROAS: <strong class="${c.roas !== null ? colorRoas(c.roas) : ''}">${roas}</strong></div>
-      </div>
-    </div>
-  `;
 }
 
 function filterComparisonTable() {
@@ -1447,7 +1381,7 @@ function renderTrendTab() {
   }
 }
 
-// --- STATUS TAB -------------------------------------------------
+// --- STATUS (helper data, ditampilkan di export Excel & Smart Report) ---
 function computeStatusRows() {
   const byStatus = {};
   state.filteredShopee.forEach(r => {
@@ -1457,46 +1391,6 @@ function computeStatusRows() {
   });
   return Object.entries(byStatus).map(([status, v]) => ({ status, count: v.orders.size, komisi: v.komisi }))
     .sort((a, b) => b.count - a.count);
-}
-
-function renderStatusTab() {
-  const byStatus = {};
-  state.filteredShopee.forEach(r => {
-    if (!byStatus[r.status]) byStatus[r.status] = { count: 0, komisi: 0, orders: new Set() };
-    byStatus[r.status].orders.add(r.orderId);
-    byStatus[r.status].komisi += r.komisiBersih;
-  });
-  Object.values(byStatus).forEach(v => { v.count = v.orders.size; });
-
-  const statusList = Object.entries(byStatus).sort((a, b) => b[1].count - a[1].count);
-  const labels  = statusList.map(([s]) => s);
-  const counts  = statusList.map(([, v]) => v.count);
-  const komisis = statusList.map(([, v]) => v.komisi);
-  const palette = ['#6366f1','#10b981','#f97316','#ef4444','#f59e0b','#3b82f6','#8b5cf6'];
-
-  destroyChart('statusPie');
-  const ctxPie = document.getElementById('chart-status-pie');
-  if (ctxPie) {
-    const canvas = ensureCanvas(ctxPie);
-    state.charts['statusPie'] = new Chart(canvas, {
-      type: 'doughnut',
-      data: { labels, datasets: [{ data: counts, backgroundColor: palette, hoverOffset: 8 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.raw} pesanan · komisi Rp${fmtK(komisis[ctx.dataIndex])}` } } }
-      }
-    });
-  }
-
-  const statusIcons = { 'Tertunda': '⏳', 'Selesai': '✅', 'Dibatalkan': '❌', 'Dikembalikan': '↩️', 'Belum Dibayar': '💳' };
-  document.getElementById('status-summary-grid').innerHTML = statusList.map(([status, d]) => `
-    <div class="status-card">
-      <div class="status-card-icon">${statusIcons[status] || ''}</div>
-      <div class="status-card-label">${esc(status)}</div>
-      <div class="status-card-count">${d.count}</div>
-      <div class="status-card-komisi">Rp ${fmt(d.komisi)}</div>
-    </div>
-  `).join('');
 }
 
 // --- CLICK INSIGHTS: NEGARA & JAM (butuh Click Report) ----------
@@ -1761,28 +1655,45 @@ function renderDecisionTab() {
 
   document.getElementById('decision-cards').innerHTML = campaigns.map(c => {
     let action, actionClass, icon, reason;
+    const days = daysInPeriod();
 
-    if (c.spent === 0) {
-      action = 'NO DATA'; actionClass = 'action-nodata'; icon = '';
+    if (!c.fb && c.spent === 0) {
+      action = 'NO DATA'; actionClass = 'action-nodata'; icon = '❔';
       reason = 'Tidak ada data spend iklan. Kemungkinan traffic organik atau mapping belum sesuai.';
-    } else if (c.roas === null || c.komisi === 0) {
-      action = 'PAUSE'; actionClass = 'action-pause'; icon = '(pause)';
-      reason = 'Tidak ada komisi tercatat. Periksa tracking link dan apakah iklan sedang berjalan.';
+    } else if (c.fb && c.spent === 0) {
+      action = 'NONAKTIF'; actionClass = 'action-nodata'; icon = '💤';
+      reason = c.fb.delivery === 'inactive'
+        ? 'Iklan mati/nonaktif di periode ini — sengaja di-pause atau kena reject? Cek Ads Manager.'
+        : 'Campaign terdaftar tapi tidak ada spend di periode ini — belum mulai tayang atau kena reject.';
+    } else if (c.orders >= 1 && c.komisi === 0) {
+      action = 'GANTI PRODUK'; actionClass = 'action-monitor'; icon = '🔄';
+      reason = `Iklan berhasil — ada ${c.orders} order, tapi produknya komisi 0%/tidak ada. Kampanyenya jalan, pilih produk lain dengan komisi layak.`;
+    } else if (c.orders === 0) {
+      action = 'PAUSE'; actionClass = 'action-pause'; icon = '⛔';
+      reason = 'Ada spend tapi belum ada order. Cek apakah link/produk masih hidup, lalu evaluasi targeting.';
+    } else if (c.orders < 3 && days < 7) {
+      action = 'DATA TIPIS'; actionClass = 'action-nodata'; icon = '⏳';
+      reason = `Baru ${c.orders} order dalam ${days} hari — ROAS ${c.roas.toFixed(2)}x masih rawan bias dari 1-2 order. Kumpulkan minimal 3 order / 7 hari sebelum ambil keputusan.`;
     } else if (c.roas >= 3) {
       action = 'SCALE UP'; actionClass = 'action-scale'; icon = '🚀';
-      reason = `ROAS ${c.roas.toFixed(2)}x sangat baik. Pertimbangkan menambah budget 2050% secara bertahap.`;
+      reason = `ROAS ${c.roas.toFixed(2)}x sangat baik. Pertimbangkan menambah budget 20-50% secara bertahap.`;
     } else if (c.roas >= 2) {
-      action = 'SCALE'; actionClass = 'action-scale'; icon = '';
+      action = 'SCALE'; actionClass = 'action-scale'; icon = '📈';
       reason = `ROAS ${c.roas.toFixed(2)}x profitable. Bisa ditingkatkan budget perlahan sambil monitoring.`;
     } else if (c.roas >= 1.2) {
       action = 'MAINTAIN'; actionClass = 'action-maintain'; icon = '✅';
       reason = `ROAS ${c.roas.toFixed(2)}x untung tipis. Pertahankan dan coba optimasi kreatif iklan.`;
     } else if (c.roas >= 0.8) {
-      action = 'MONITOR'; actionClass = 'action-monitor'; icon = '';
+      action = 'MONITOR'; actionClass = 'action-monitor'; icon = '👀';
       reason = `ROAS ${c.roas.toFixed(2)}x mendekati rugi. Monitor ketat, coba A/B test creative.`;
     } else {
       action = 'PAUSE'; actionClass = 'action-pause'; icon = '⛔';
       reason = `ROAS ${c.roas.toFixed(2)}x - rugi. Pause dan evaluasi ulang produk, targeting, atau kreatif.`;
+    }
+
+    // komisi/order tipis = butuh volume besar demi profit
+    if (['SCALE UP', 'SCALE', 'MAINTAIN', 'MONITOR'].includes(action) && c.komisiPerOrder !== null && c.komisiPerOrder < 300) {
+      reason += ` Komisi/order sangat tipis (Rp ${fmt(c.komisiPerOrder)}) — butuh volume besar untuk profit.`;
     }
 
     const cpoTxt   = c.cpo   ? 'Rp ' + fmt(c.cpo)       : '-';
@@ -1841,41 +1752,6 @@ function renderDecisionTab() {
       <div class="decision-reason">${bepLine}${reason}${fbHint}</div>
     </div>`;
   }).join('') || '<p class="no-data">Tidak ada data untuk ditampilkan.</p>';
-}
-
-// --- BREAKEVEN --------------------------------------------------
-function prefillBreakeven() {
-  const camps = buildCampaignData();
-  const totalSpent = camps.reduce((s, c) => s + c.spent, 0);
-  const totalKomisi = camps.reduce((s, c) => s + c.komisi, 0);
-  const orders = new Set(state.filteredShopee.filter(isCountableOrder).map(r => r.orderId)).size;
-  const days = daysInPeriod();
-  if (totalSpent > 0) document.getElementById('be-budget').value = Math.round(totalSpent / days);
-  if (orders > 0) document.getElementById('be-komisi').value = Math.round(totalKomisi / orders);
-  calcBreakeven();
-}
-
-function calcBreakeven() {
-  const budget      = parseNum(document.getElementById('be-budget').value);
-  const avgKomisi   = parseNum(document.getElementById('be-komisi').value);
-  const targetProfit = parseNum(document.getElementById('be-profit').value);
-
-  if (budget <= 0 || avgKomisi <= 0) {
-    document.getElementById('be-result').innerHTML = 'Isi nilai budget dan komisi rata-rata.';
-    return;
-  }
-
-  const ordersNeeded  = Math.ceil((budget + targetProfit) / avgKomisi);
-  const minRoas       = (budget + targetProfit) / budget;
-  const komisiNeeded  = budget + targetProfit;
-
-  document.getElementById('be-result').innerHTML = `
-    ❌ Dengan budget <strong>Rp ${fmt(budget)}</strong>/hari dan komisi rata-rata <strong>Rp ${fmt(avgKomisi)}</strong>/order:<br>
-     Minimum <strong>${ordersNeeded} order</strong>/hari dibutuhkan agar tidak rugi<br>
-     Minimum komisi total <strong>Rp ${fmt(komisiNeeded)}</strong>/hari<br>
-     ROAS minimum: <strong>${minRoas.toFixed(2)}x</strong>
-    ${targetProfit > 0 ? `<br> Untuk profit Rp ${fmt(targetProfit)}, butuh ROAS <strong>${minRoas.toFixed(2)}x</strong>` : ''}
-  `;
 }
 
 // --- TABLES: SORT & SEARCH --------------------------------------
