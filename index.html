@@ -7,7 +7,7 @@
   <meta name="description" content="Tool analisis ROAS dan profitabilitas untuk Shopee Affiliate yang menggunakan Facebook Ads. Upload dua file, langsung dapat insight." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260829b" />
+  <link rel="stylesheet" href="style.css?v=20260829c" />
 </head>
 <body>
   <!-- HEADER -->
@@ -127,9 +127,13 @@
           </label>
           <button class="btn-ghost" onclick="resetFilters()">Reset</button>
           <button class="btn-ghost" onclick="openMapping()">⚙️ Mapping</button>
+          <button class="btn-ghost" onclick="window.print()">🖨️ Cetak / PDF</button>
           <button class="btn-ghost danger" onclick="resetAll()">↩️ Upload Ulang</button>
         </div>
       </div>
+
+      <!-- SANITY WARNINGS -->
+      <div id="sanity-warnings" class="sanity-warnings" style="display:none"></div>
 
       <!-- SMART REPORT -->
       <div id="smart-report" class="smart-report" style="display:none"></div>
@@ -334,7 +338,8 @@
                   <th onclick="sortTable('tbl-comparison',9)" title="Berapa klik FB yang dibutuhkan per 1 order Shopee">Klik/Order ↕</th>
                   <th onclick="sortTable('tbl-comparison',10)">CPO ↕</th>
                   <th onclick="sortTable('tbl-comparison',11)">Komisi ↕</th>
-                  <th onclick="sortTable('tbl-comparison',12)">ROAS ↕</th>
+                  <th onclick="sortTable('tbl-comparison',12)" title="Komisi bersih per 1.000 klik iklan FB — buat bandingin efisiensi antar campaign">Komisi/1k Klik ↕</th>
+                  <th onclick="sortTable('tbl-comparison',13)">ROAS ↕</th>
                 </tr>
               </thead>
               <tbody id="tbody-comparison"></tbody>
@@ -362,6 +367,14 @@
           <div class="chart-card wide">
             <div class="chart-title">Komisi Kumulatif per Hari <span class="chart-hint">(Rp)</span></div>
             <div class="chart-wrap" id="chart-trend-komisi"></div>
+          </div>
+        </div>
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">📈 Perjalanan ROAS <span class="chart-hint">(dari riwayat analisis tersimpan di browser ini)</span>
+              <button class="btn-ghost" style="font-size:11px;padding:3px 9px" onclick="clearHistory()">🗑️ Hapus Riwayat</button>
+            </div>
+            <div class="chart-wrap" id="chart-history-roas"></div>
           </div>
         </div>
       </div>
@@ -398,6 +411,7 @@
             <label>Budget Harian (Rp) <input type="number" id="be-budget" value="25000" oninput="calcBreakeven()" /></label>
             <label>Rata-rata Komisi per Order (Rp) <input type="number" id="be-komisi" value="5000" oninput="calcBreakeven()" /></label>
             <label>Target Profit (Rp) <input type="number" id="be-profit" value="0" oninput="calcBreakeven()" /></label>
+            <button class="btn-ghost" type="button" onclick="prefillBreakeven()" title="Isi otomatis dari rata-rata data yang lagi dianalisis">⟳ Pakai rata-rata data</button>
           </div>
           <div id="be-result" class="be-result"></div>
         </div>
@@ -418,6 +432,6 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="parsers.js?v=20260829b"></script>
-  <script src="app.js?v=20260829d"></script>
+  <script src="app.js?v=20260829e"></script>
 </body>
 </html>

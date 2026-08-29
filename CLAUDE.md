@@ -64,6 +64,15 @@ Fitur v2.5 (Smart Report):
 - Tab Rekomendasi punya hitungan BEP konkret per campaign: butuh X order/hari vs realita Y order/hari
 - `daysInPeriod()` = sumber jumlah hari terfilter untuk semua hitungan per-hari
 
+Fitur v2.6 (guard & riwayat):
+- **Sanity warnings** (banner kuning/biru di atas Smart Report): (1) kemungkinan spend dobel = duplikat campaign+tanggal di data FB (file overlap), (2) order nyangkut di tag yang gak match campaign FB — arahkan ke ⚙️ Mapping, (3) coverage Click Report < periode data, (4) funnel pakai LPV karena Click Report gak diupload
+- **Riwayat snapshot** per periode (IndexedDB store `history`, key `start|end`, di-save tiap applyFilters): chart **Perjalanan ROAS** di tab Tren Harian + baris "vs periode sebelumnya" di Smart Report (ROAS/spend/komisi vs snapshot terakhir yang end-nya sebelum periode sekarang)
+- **Checklist aksi** di tab Rekomendasi (localStorage `affalitycs_action_checks`): centang campaign yang udah dieksekusi; auto-hapus kalau rekomendasi campaign berubah atau campaign hilang dari data
+- **Komisi/1k Klik** di tabel Perbandingan (kolom baru — thead Shopee colspan jadi pas 8)
+- **Prefill breakeven**: tombol "⟳ Pakai rata-rata data" isi budget harian & komisi/order dari data asli
+- **🖨️ Cetak / PDF**: window.print() + `@media print` (sembunyikan filter/tab/upload, cetak Smart Report + KPI + tab aktif)
+- **Mobile responsive**: `@media (max-width: 768px)` — KPI 2 kolom, chart 1 kolom, tabel scroll horizontal
+
 ## Persistensi
 
 - Mapping tag→campaign disimpan di `localStorage` key `affalitycs_mapping`

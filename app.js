@@ -18,6 +18,8 @@ const state = {
   charts: {},
   sortDir: {},
   dateRatio: 1,
+  history: [],           // snapshot riwayat analisis (dari IndexedDB)
+  _decisionCampaigns: [], // cache render terakhir tab Rekomendasi (untuk checklist)
 };
 
 // --- HELPERS ---------------------------------------------------
@@ -279,8 +281,12 @@ function saveMapping(m) {
 // Murni storage browser ini — gak ada data yang dikirim ke mana pun.
 function idbOpen() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('affalitycs', 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('session');
+    const req = indexedDB.open('affalitycs', 2);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('session')) db.createObjectStore('session');
+      if (!db.objectStoreNames.contains('history')) db.createObjectStore('history');
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
@@ -325,6 +331,8 @@ async function clearSession() {
 
 async function checkResume() {
   try {
+    state.history = await loadHistory();
+    state.history.sort((a, b) => (a.end || '').localeCompare(b.end || ''));
     const s = await loadSession();
     if (!s || !s.shopeeRows || !s.shopeeRows.length) return;
     const dates = s.shopeeRows.map(r => r.date).filter(Boolean).sort();
@@ -358,6 +366,65 @@ async function restoreSession() {
 
 function dismissResume() {
   document.getElementById('resume-banner').style.display = 'none';
+}
+
+// --- RIWAYAT SNAPSHOT (IndexedDB store 'history') -----------------
+// Tiap analisis tersimpan per periode (start|end) — buat tren ROAS & perbandingan antar periode.
+async function loadHistory() {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const rq = db.transaction('history', 'readonly').objectStore('history').getAll();
+      rq.onsuccess = () => resolve(rq.result || []);
+      rq.onerror = () => reject(rq.error);
+    });
+  } catch (e) { return []; }
+}
+
+async function saveSnapshot() {
+  try {
+    const camps = buildCampaignData().filter(c => c.spent > 0 || c.orders > 0);
+    if (camps.length === 0) return;
+    const totalSpent = camps.reduce((s, c) => s + c.spent, 0);
+    const totalKomisi = camps.reduce((s, c) => s + c.komisi, 0);
+    if (totalSpent === 0 && totalKomisi === 0) return;
+
+    let cair = 0, pending = 0;
+    state.filteredShopee.forEach(r => {
+      const st = (r.status || '').toLowerCase();
+      if (st.includes('selesai')) cair += r.komisiBersih;
+      else if (st.includes('tertu') || st.includes('belum dibayar')) pending += r.komisiBersih;
+    });
+
+    const start = document.getElementById('filter-start').value;
+    const end = document.getElementById('filter-end').value;
+    if (!start && !end) return;
+
+    const snap = {
+      key: start + '|' + end, start, end, savedAt: Date.now(),
+      spent: totalSpent, komisi: totalKomisi,
+      orders: new Set(state.filteredShopee.filter(isCountableOrder).map(r => r.orderId)).size,
+      profit: totalKomisi - totalSpent,
+      roas: totalSpent > 0 ? totalKomisi / totalSpent : null,
+      days: daysInPeriod(), cair, pending,
+    };
+    const i = state.history.findIndex(h => h.key === snap.key);
+    if (i >= 0) state.history[i] = snap; else state.history.push(snap);
+    state.history.sort((a, b) => (a.end || '').localeCompare(b.end || ''));
+
+    const db = await idbOpen();
+    db.transaction('history', 'readwrite').objectStore('history').put(snap, snap.key);
+  } catch (e) { /* diam-diam */ }
+}
+
+async function clearHistory() {
+  if (!confirm('Hapus semua riwayat analisis? Sesi upload tidak ikut terhapus.')) return;
+  try {
+    const db = await idbOpen();
+    db.transaction('history', 'readwrite').objectStore('history').clear();
+  } catch (e) {}
+  state.history = [];
+  renderAll();
 }
 
 checkResume();
@@ -465,6 +532,7 @@ function applyFilters() {
   console.log('[Filter] dateRatio:', state.dateRatio.toFixed(3), 'fbHasDates:', fbHasDates, 'clicks:', state.filteredClicks.length);
   renderAll();
   saveSession();
+  saveSnapshot();
 }
 
 function renderAll() {
@@ -478,6 +546,8 @@ function renderAll() {
   try { renderDecisionTab(); } catch(e) { console.warn('renderDecisionTab:', e); }
   try { renderClickInsights(); } catch(e) { console.warn('renderClickInsights:', e); }
   try { renderFbBreakdown(); } catch(e) { console.warn('renderFbBreakdown:', e); }
+  try { renderSanity(); } catch(e) { console.warn('renderSanity:', e); }
+  try { renderRoasJourney(); } catch(e) { console.warn('renderRoasJourney:', e); }
 }
 
 // --- MERGE SHOPEE + FB ------------------------------------------
@@ -675,6 +745,22 @@ function renderSmartReport() {
     worstBep = 'butuh ' + needed + ' order/hari (realita ' + actual + '/hari)';
   }
 
+  // Perbandingan dengan periode tersimpan sebelumnya
+  let prevItem = '';
+  const startCur = document.getElementById('filter-start').value;
+  if (startCur && state.history && state.history.length > 0) {
+    const prev = state.history
+      .filter(h => h.end && h.end < startCur && h.roas !== null && h.roas !== undefined)
+      .sort((a, b) => (b.end || '').localeCompare(a.end || ''))[0];
+    if (prev && roas !== null) {
+      const dr = prev.roas > 0 ? ((roas - prev.roas) / prev.roas * 100) : null;
+      const roasColor = dr !== null && dr < 0 ? '#ef4444' : '#10b981';
+      prevItem = `<div class="sr-item"><div class="sr-label">📅 vs periode sebelumnya (${esc(prev.start || '…')} – ${esc(prev.end || '…')})</div>
+        ROAS ${prev.roas.toFixed(2)}x → <strong>${roas.toFixed(2)}x</strong>${dr !== null ? ` <span style="color:${roasColor};font-weight:700">(${dr >= 0 ? '+' : ''}${dr.toFixed(0)}%)</span>` : ''}
+        ${prev.spent > 0 ? `<div style="font-size:12px;color:#64748b">Spend Rp ${fmt(prev.spent)} → Rp ${fmt(totalSpent)} · Komisi Rp ${fmt(prev.komisi)} → Rp ${fmt(totalKomisi)}</div>` : ''}</div>`;
+    }
+  }
+
   el.innerHTML = `
     <div class="sr-head">
       <span>🤖</span>
@@ -682,6 +768,7 @@ function renderSmartReport() {
       ${roas !== null ? `<span class="sr-roas ${colorRoas(roas)}">ROAS ${roas.toFixed(2)}x</span>` : ''}
     </div>
     <div class="sr-grid">
+      ${prevItem}
       <div class="sr-item"><div class="sr-label">💰 Komisi (kondisi)</div>
         Cair <strong>Rp ${fmt(cair)}</strong> · Pending <strong>Rp ${fmt(pending)}</strong>${gagal > 0 ? ' · Gagal <strong>Rp ' + fmt(gagal) + '</strong>' : ''}
         <div style="font-size:11px;color:#94a3b8">komisi pending biasanya cair 10-15 hari kerja</div></div>
@@ -1072,6 +1159,7 @@ function renderComparisonTab() {
       <td class="${clickGapCls}">${clickGap!==null ? clickGap+' klik/order' : '-'}</td>
       <td>${cpoTxt}</td>
       <td>Rp ${fmt(c.komisi)}</td>
+      <td>${c.fb && c.fb.linkClicks > 0 ? 'Rp ' + fmt(c.komisi / c.fb.linkClicks * 1000) : '-'}</td>
       <td class="${roasClass}">${roasTxt}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="13" class="no-data">Tidak ada data</td></tr>';
@@ -1347,6 +1435,88 @@ function renderClickInsights() {
   });
 }
 
+// --- SANITY WARNINGS (guard data aneh) ---------------------------
+function renderSanity() {
+  const el = document.getElementById('sanity-warnings');
+  if (!el) return;
+  const warns = [];
+
+  // 1. Kemungkinan spend dobel: campaign+tanggal sama muncul >1x di data FB
+  const seen = new Map();
+  state.filteredFb.forEach(c => {
+    if (!c.date) return;
+    const k = c.campaignName + '|' + c.date;
+    seen.set(k, (seen.get(k) || 0) + 1);
+  });
+  const dups = [...seen.entries()].filter(([, n]) => n > 1);
+  if (dups.length > 0) {
+    const totalDup = dups.reduce((s, [, n]) => s + (n - 1), 0);
+    const [name, date] = dups[0][0].split('|');
+    warns.push({ type: 'warn', icon: '⚠️',
+      text: `<strong>Kemungkinan spend dobel:</strong> ${dups.length} kombinasi campaign+tanggal muncul lebih dari 1x (total ${totalDup} baris berlebih). Contoh: <strong>${esc(name)}</strong> tanggal ${esc(date)} muncul ${dups[0][1]}x. Cek apakah ada file FB Ads yang periodenya overlap.` });
+  }
+
+  // 2. Order nyangkut di tag yang gak match campaign FB manapun
+  if (state.filteredFb.length > 0) {
+    buildCampaignData()
+      .filter(c => !c.fb && c.orders > 0 && c.name !== '(tidak ada tag)')
+      .forEach(c => {
+        warns.push({ type: 'warn', icon: '🔗',
+          text: `<strong>${esc(c.name)}</strong>: ${c.orders} order (komisi Rp ${fmt(c.komisi)}) gak match campaign FB manapun — komisi ini gak kebanding sama spend-nya. Buka <strong>⚙️ Mapping</strong> buat nyambungin.` });
+      });
+  }
+
+  // 3. Coverage Click Report vs periode data
+  if (state.clickReport.length > 0 && state.filteredClicks.length > 0) {
+    const shopeeDays = new Set(state.filteredShopee.map(r => r.date).filter(Boolean));
+    const clickDays = new Set(state.filteredClicks.map(c => c.date).filter(Boolean));
+    if (shopeeDays.size > 0 && clickDays.size < shopeeDays.size) {
+      warns.push({ type: 'info', icon: 'ℹ️',
+        text: `Click Report cuma cover <strong>${clickDays.size} dari ${shopeeDays.size} hari</strong> — funnel tahap 2 (klik masuk Shopee) bisa lebih kecil dari kenyataan. Download Click Report untuk periode penuh kalau mau funnel akurat.` });
+    }
+  } else if (state.clickReport.length === 0 && state.filteredFb.some(c => c.landingPageViews > 0)) {
+    warns.push({ type: 'info', icon: 'ℹ️',
+      text: `Funnel tahap 2 sekarang pakai <strong>Landing Page Views</strong> dari FB (proxy kasar). Upload <strong>Shopee Website Click Report</strong> biar jumlah klik masuk Shopee akurat.` });
+  }
+
+  if (warns.length === 0) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = warns.map(w => `<div class="sanity-item sanity-${w.type}"><span>${w.icon}</span><span>${w.text}</span></div>`).join('');
+}
+
+// --- PERJALANAN ROAS (dari riwayat snapshot) ---------------------
+function renderRoasJourney() {
+  const wrap = document.getElementById('chart-history-roas');
+  if (!wrap) return;
+  const hist = (state.history || []).filter(h => h.roas !== null && h.roas !== undefined)
+    .sort((a, b) => (a.end || '').localeCompare(b.end || ''));
+  destroyChart('roasJourney');
+  if (hist.length < 2) {
+    wrap.innerHTML = '<div class="chart-empty">Belum cukup riwayat — lakukan analisis di minimal 2 periode berbeda (mis. minggu lalu & minggu ini), nanti perjalanan ROAS lo muncul di sini otomatis.</div>';
+    return;
+  }
+  const canvas = ensureCanvas(wrap);
+  state.charts['roasJourney'] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: hist.map(h => h.start ? `${(h.start || '').slice(5)} → ${(h.end || '').slice(5)}` : new Date(h.savedAt).toLocaleDateString('id-ID')),
+      datasets: [
+        { label: 'ROAS', data: hist.map(h => +h.roas.toFixed(2)), borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', borderWidth: 2.5, pointRadius: 5, pointHoverRadius: 7, fill: true, tension: 0.3 },
+        { label: 'Break-even (1x)', data: hist.map(() => 1), borderColor: '#94a3b8', borderDash: [6, 4], borderWidth: 2, pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (ctx) => {
+        if (ctx.datasetIndex !== 0) return 'Break-even';
+        const h = hist[ctx.dataIndex];
+        return [`ROAS: ${h.roas.toFixed(2)}x`, `Spend: Rp${fmtK(h.spent)}`, `Komisi: Rp${fmtK(h.komisi)}`, `Orders: ${h.orders}`];
+      } } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => parseFloat(v).toFixed(1) + 'x' } } }
+    }
+  });
+}
+
 // --- FB BREAKDOWN: AGE / GENDER / PLATFORM / REGION -------------
 function renderFbBreakdown() {
   const wrapAge = document.getElementById('chart-fb-age');
@@ -1421,9 +1591,36 @@ function renderFbBreakdown() {
   });
 }
 
+// Checklist aksi (persist di localStorage) — auto-bersih kalau rekomendasi campaign berubah
+function loadActionChecks() {
+  try { return JSON.parse(localStorage.getItem('affalitycs_action_checks') || '{}'); } catch { return {}; }
+}
+function saveActionChecks(m) {
+  try { localStorage.setItem('affalitycs_action_checks', JSON.stringify(m)); } catch {}
+}
+function toggleActionCheck(idx, checked) {
+  const c = (state._decisionCampaigns || [])[idx];
+  if (!c) return;
+  const checks = loadActionChecks();
+  if (checked) checks[c.name] = { action: c._action, checkedAt: Date.now() };
+  else delete checks[c.name];
+  saveActionChecks(checks);
+}
+
 // --- DECISION TAB -----------------------------------------------
 function renderDecisionTab() {
   const campaigns = buildCampaignData().filter(c => c.spent > 0 || c.orders > 0);
+
+  // tandai aksi tiap campaign & bersihkan checklist yang basi
+  campaigns.forEach(c => { c._action = null; });
+  const checks = loadActionChecks();
+  let checksDirty = false;
+  Object.keys(checks).forEach(name => {
+    const c = campaigns.find(x => x.name === name);
+    if (!c) { delete checks[name]; checksDirty = true; }  // campaign gak ada lagi di data
+  });
+  if (checksDirty) saveActionChecks(checks);
+  state._decisionCampaigns = [];
 
   document.getElementById('decision-cards').innerHTML = campaigns.map(c => {
     let action, actionClass, icon, reason;
@@ -1474,9 +1671,19 @@ function renderDecisionTab() {
       bepLine = `Butuh <strong>${needed} order/hari</strong> demi balik modal (realita ${actual}/hari, komisi/order Rp ${fmt(c.komisiPerOrder)}). `;
     }
 
+    // checklist: kalau aksi berubah dari yang dicentang, anggap basi & hapus
+    c._action = action;
+    const stored = checks[c.name];
+    const checked = !!stored && stored.action === action;
+    if (stored && stored.action !== action) { delete checks[c.name]; checksDirty = true; }
+    const idx = state._decisionCampaigns.push(c) - 1;
+
     return `
     <div class="decision-card">
       <div class="decision-card-header">
+        <label class="action-check" title="Centang kalau aksi ini sudah lo eksekusi di Ads Manager">
+          <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleActionCheck(${idx}, this.checked)" />
+        </label>
         <span class="decision-action-icon">${icon}</span>
         <span class="decision-campaign-name">${esc(c.name)}</span>
         <span class="decision-action-badge ${actionClass}">${action}</span>
@@ -1500,6 +1707,17 @@ function renderDecisionTab() {
 }
 
 // --- BREAKEVEN --------------------------------------------------
+function prefillBreakeven() {
+  const camps = buildCampaignData();
+  const totalSpent = camps.reduce((s, c) => s + c.spent, 0);
+  const totalKomisi = camps.reduce((s, c) => s + c.komisi, 0);
+  const orders = new Set(state.filteredShopee.filter(isCountableOrder).map(r => r.orderId)).size;
+  const days = daysInPeriod();
+  if (totalSpent > 0) document.getElementById('be-budget').value = Math.round(totalSpent / days);
+  if (orders > 0) document.getElementById('be-komisi').value = Math.round(totalKomisi / orders);
+  calcBreakeven();
+}
+
 function calcBreakeven() {
   const budget      = parseNum(document.getElementById('be-budget').value);
   const avgKomisi   = parseNum(document.getElementById('be-komisi').value);

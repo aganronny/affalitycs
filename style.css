@@ -480,6 +480,80 @@ body {
   letter-spacing: 0.4px;
   margin-bottom: 2px;
 }
+
+/* ── SANITY WARNINGS ── */
+.sanity-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.sanity-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.sanity-warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+.sanity-info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+
+/* ── CHECKLIST AKSI (tab Rekomendasi) ── */
+.action-check {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.action-check input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #10b981;
+}
+
+/* ── PRINT (Cetak / PDF) ── */
+@media print {
+  body { background: #fff; }
+  .site-header .header-meta,
+  .filter-bar, .tab-bar, #section-upload, .resume-banner,
+  .sanity-warnings, .btn-export, .table-search,
+  .breakeven-card, .decision-intro, .comparison-intro, .trend-intro,
+  .mapping-modal, .loading-overlay { display: none !important; }
+  .tab-content { display: none !important; }
+  .tab-content.active { display: block !important; }
+  .smart-report, .kpi-card, .chart-card, .table-card {
+    box-shadow: none !important;
+    border: 1px solid #d7dce3 !important;
+    break-inside: avoid;
+  }
+  .chart-wrap { height: 220px !important; }
+  .chart-wrap.tall { height: 300px !important; }
+  .table-wrap { overflow: visible !important; }
+}
+
+/* ── MOBILE ── */
+@media (max-width: 768px) {
+  .container { padding: 0 12px; }
+  .upload-grid { grid-template-columns: 1fr; }
+  .upload-hero h1 { font-size: 24px; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .chart-row { grid-template-columns: 1fr; }
+  .sr-grid { grid-template-columns: 1fr; }
+  .sr-head { font-size: 15px; }
+  .status-summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .filter-bar { padding: 12px; }
+  .filter-controls { gap: 6px; }
+  .table-card table { min-width: 720px; }
+  .table-header { flex-direction: column; align-items: stretch; }
+  .breakeven-form { flex-direction: column; align-items: stretch; }
+  .mapping-row { flex-direction: column; gap: 6px; }
+  .resume-banner { flex-direction: column; align-items: flex-start; }
+  .decision-metrics { gap: 6px; }
+  .dm-item { min-width: 30%; }
+}
 .chart-wrap { position: relative; height: 280px; }
 .chart-wrap.tall { height: 380px; }
 
