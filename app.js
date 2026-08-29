@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v2.2 - April 2026
+   v2.3 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -20,7 +20,15 @@ const state = {
 
 // --- HELPERS ---------------------------------------------------
 const fmt = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n));
-const fmtK = (n) => n >= 1_000_000 ? (n/1_000_000).toFixed(1)+'Jt' : n >= 1_000 ? (n/1_000).toFixed(1)+'rb' : Math.round(n);
+const fmtK = (n) => {
+  const sign = n < 0 ? '-' : '';
+  const a = Math.abs(n);
+  if (a >= 1_000_000) return sign + (a/1_000_000).toFixed(1) + 'Jt';
+  if (a >= 1_000) return sign + (a/1_000).toFixed(1) + 'rb';
+  return String(Math.round(a));
+};
+// Escape string sebelum masuk innerHTML — data CSV Shopee/FB bisa berisi <, >, &, "
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const fmtRoas = (r) => r === null || r === undefined || !isFinite(r) ? '-' : r.toFixed(2) + 'x';
 const parseNum = (s) => {
   if (s === null || s === undefined || s === '' || s === '-') return 0;
@@ -512,12 +520,12 @@ function showMappingModal(unmatchedTags, fbNames, showAll = false) {
     row.className = 'mapping-row';
     const autoLabel = currentMap ? `<span style="font-size:11px;color:#10b981;margin-left:6px"> auto</span>` : '';
     const options = ['- Tidak Dipetakan -', ...fbNames].map(n =>
-      `<option value="${n}" ${currentMap === n ? 'selected' : ''}>${n}</option>`
+      `<option value="${esc(n)}" ${currentMap === n ? 'selected' : ''}>${esc(n)}</option>`
     ).join('');
     row.innerHTML = `
-      <div class="mapping-tag">${tag}${autoLabel}</div>
+      <div class="mapping-tag">${esc(tag)}${autoLabel}</div>
       <div class="mapping-arrow">-></div>
-      <select class="mapping-select" data-tag="${tag}">${options}</select>
+      <select class="mapping-select" data-tag="${esc(tag)}">${options}</select>
     `;
     container.appendChild(row);
   });
@@ -663,6 +671,7 @@ function renderAll() {
   try { renderTrendTab(); } catch(e) { console.warn('renderTrendTab:', e); }
   try { renderStatusTab(); } catch(e) { console.warn('renderStatusTab:', e); }
   try { renderDecisionTab(); } catch(e) { console.warn('renderDecisionTab:', e); }
+  try { renderClickInsights(); } catch(e) { console.warn('renderClickInsights:', e); }
 }
 
 // --- MERGE SHOPEE + FB ------------------------------------------
@@ -825,7 +834,7 @@ function renderInsightBar() {
     const best = withRoas.reduce((a, b) => b.roas > a.roas ? b : a);
     insights.push({
       icon: '',
-      text: `<strong>${best.name}</strong> adalah campaign terbaik dengan ROAS <strong>${best.roas.toFixed(2)}x</strong> dan komisi <strong>Rp${fmtK(best.komisi)}</strong>`,
+      text: `<strong>${esc(best.name)}</strong> adalah campaign terbaik dengan ROAS <strong>${best.roas.toFixed(2)}x</strong> dan komisi <strong>Rp${fmtK(best.komisi)}</strong>`,
       type: 'positive'
     });
   }
@@ -835,7 +844,7 @@ function renderInsightBar() {
     const worst = withSpend.reduce((a, b) => b.roas < a.roas ? b : a);
     insights.push({
       icon: '⛔',
-      text: `<strong>${worst.name}</strong> rugi dengan ROAS <strong>${worst.roas.toFixed(2)}x</strong> - disarankan di-pause atau dioptimasi kreatif`,
+      text: `<strong>${esc(worst.name)}</strong> rugi dengan ROAS <strong>${worst.roas.toFixed(2)}x</strong> - disarankan di-pause atau dioptimasi kreatif`,
       type: 'negative'
     });
   }
@@ -845,18 +854,18 @@ function renderInsightBar() {
     const c = highCtrLowRoas[0];
     insights.push({
       icon: '💡',
-      text: `<strong>${c.name}</strong> punya CTR tinggi (${c.fb.ctr.toFixed(1)}%) tapi ROAS rendah (${c.roas.toFixed(2)}x) - kemungkinan masalah ada di halaman produk atau harga`,
+      text: `<strong>${esc(c.name)}</strong> punya CTR tinggi (${c.fb.ctr.toFixed(1)}%) tapi ROAS rendah (${c.roas.toFixed(2)}x) - kemungkinan masalah ada di halaman produk atau harga`,
       type: 'warning'
     });
   }
 
-  const pendingRows = state.filteredShopee.filter(r => r.status && r.status.toLowerCase().includes('tertu'));
+  const pendingRows = state.filteredShopee.filter(r => /tertu|belum dibayar/i.test(r.status || ''));
   if (pendingRows.length > 0) {
     const pendingKomisi = pendingRows.reduce((s, r) => s + r.komisiBersih, 0);
     const pendingOrders = new Set(pendingRows.map(r => r.orderId)).size;
     insights.push({
       icon: '⏳',
-      text: `<strong>${pendingOrders} pesanan</strong> masih berstatus Tertunda - estimasi komisi pending <strong>Rp${fmtK(pendingKomisi)}</strong>`,
+      text: `<strong>${pendingOrders} pesanan</strong> masih berstatus Tertunda/Belum Dibayar - estimasi komisi pending <strong>Rp${fmtK(pendingKomisi)}</strong>`,
       type: 'neutral'
     });
   }
@@ -866,7 +875,7 @@ function renderInsightBar() {
     const mostEfficient = withCpo.reduce((a, b) => b.cpo < a.cpo ? b : a);
     insights.push({
       icon: '🎯',
-      text: `Campaign <strong>${mostEfficient.name}</strong> paling efisien dengan CPO terendah: <strong>Rp${fmt(mostEfficient.cpo)}</strong> per order`,
+      text: `Campaign <strong>${esc(mostEfficient.name)}</strong> paling efisien dengan CPO terendah: <strong>Rp${fmt(mostEfficient.cpo)}</strong> per order`,
       type: 'positive'
     });
   }
@@ -965,7 +974,7 @@ function renderCampaignTab() {
     const roasClass = c.roas !== null ? colorRoas(c.roas) : '';
     const cpoTxt    = c.cpo !== null ? 'Rp ' + fmt(c.cpo) : '-';
     return `<tr>
-      <td><strong>${c.name}</strong>${c.fb && c.fb.delivery === 'inactive' ? ' <span class="badge badge-gray" style="font-size:10px">nonaktif</span>' : ''}</td>
+      <td><strong>${esc(c.name)}</strong>${c.fb && c.fb.delivery === 'inactive' ? ' <span class="badge badge-gray" style="font-size:10px">nonaktif</span>' : ''}</td>
       <td>${c.spent > 0 ? 'Rp ' + fmt(c.spent) : '-'}</td>
       <td>${c.orders}</td>
       <td>Rp ${fmt(c.komisi)}</td>
@@ -1027,12 +1036,12 @@ function renderProductTab() {
   }
 
   document.getElementById('tbody-product').innerHTML = products.map(p => `<tr>
-    <td style="max-width:260px;white-space:normal;line-height:1.4">${p.name}</td>
-    <td>${p.kategori}</td>
+    <td style="max-width:260px;white-space:normal;line-height:1.4">${esc(p.name)}</td>
+    <td>${esc(p.kategori)}</td>
     <td><strong>${p.orders}</strong></td>
     <td>Rp ${fmt(p.nilai)}</td>
     <td>Rp ${fmt(p.komisi)}</td>
-    <td style="max-width:160px;white-space:normal">${p.campaigns.slice(0,3).map(c => `<span class="badge badge-blue">${c}</span>`).join(' ')}</td>
+    <td style="max-width:160px;white-space:normal">${p.campaigns.slice(0,3).map(c => `<span class="badge badge-blue">${esc(c)}</span>`).join(' ')}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="no-data">Tidak ada produk</td></tr>';
 }
 
@@ -1185,7 +1194,7 @@ function renderComparisonTab() {
   const currentVal = sel.value;
   sel.innerHTML = '<option value="">- Pilih Campaign -</option>' +
     campaigns.filter(c => c.fb).map(c =>
-      `<option value="${c.name}" ${currentVal===c.name?'selected':''}>${c.name}</option>`
+      `<option value="${esc(c.name)}" ${currentVal===c.name?'selected':''}>${esc(c.name)}</option>`
     ).join('');
   if (sel.value) renderFunnel();
 
@@ -1251,7 +1260,7 @@ function renderComparisonTab() {
     const dropPct     = (c.dropClickToShopeePct != null && isFinite(c.dropClickToShopeePct)) ? parseFloat(c.dropClickToShopeePct.toFixed(1)) : null;
     const dropClass   = dropPct!==null ? (dropPct>50?'roas-negative':dropPct>20?'roas-neutral':'roas-positive') : '';
     return `<tr>
-      <td><strong>${c.name}</strong></td>
+      <td><strong>${esc(c.name)}</strong></td>
       <td>${c.fb ? fmt(c.fb.impressions) : '-'}</td>
       <td>${fbKlik}</td>
       <td>${spClk}</td>
@@ -1469,11 +1478,73 @@ function renderStatusTab() {
   document.getElementById('status-summary-grid').innerHTML = statusList.map(([status, d]) => `
     <div class="status-card">
       <div class="status-card-icon">${statusIcons[status] || ''}</div>
-      <div class="status-card-label">${status}</div>
+      <div class="status-card-label">${esc(status)}</div>
       <div class="status-card-count">${d.count}</div>
       <div class="status-card-komisi">Rp ${fmt(d.komisi)}</div>
     </div>
   `).join('');
+}
+
+// --- CLICK INSIGHTS: NEGARA & JAM (butuh Click Report) ----------
+function renderClickInsights() {
+  const geoWrap  = document.getElementById('chart-geo');
+  const hourWrap = document.getElementById('chart-hours');
+  if (!geoWrap || !hourWrap) return;
+
+  if (!state.filteredClicks || state.filteredClicks.length === 0) {
+    destroyChart('geo');
+    destroyChart('hours');
+    geoWrap.innerHTML  = '<div class="chart-empty">Upload Shopee Click Report untuk melihat distribusi negara.</div>';
+    hourWrap.innerHTML = '<div class="chart-empty">Upload Shopee Click Report untuk melihat distribusi jam.</div>';
+    return;
+  }
+
+  // Klik per negara (top 10)
+  const byGeo = {};
+  state.filteredClicks.forEach(c => {
+    const key = c.wilayah && c.wilayah !== '-' ? c.wilayah : '(tidak diketahui)';
+    byGeo[key] = (byGeo[key] || 0) + 1;
+  });
+  const geoList = Object.entries(byGeo).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  destroyChart('geo');
+  const geoCanvas = ensureCanvas(geoWrap);
+  state.charts['geo'] = new Chart(geoCanvas, {
+    type: 'bar',
+    data: {
+      labels: geoList.map(([g]) => g.length > 25 ? g.slice(0, 25) + '…' : g),
+      datasets: [{ label: 'Klik', data: geoList.map(([, v]) => v), backgroundColor: '#8b5cf6', borderRadius: 4 }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { x: { beginAtZero: true, title: { display: true, text: 'Jumlah Klik' } } }
+    }
+  });
+
+  // Klik per jam (00-23) — jam tertinggi di-highlight hijau
+  const byHour = Array(24).fill(0);
+  state.filteredClicks.forEach(c => {
+    const h = parseInt((c.waktuKlik || '').slice(11, 13), 10);
+    if (!isNaN(h) && h >= 0 && h <= 23) byHour[h]++;
+  });
+  const maxHour = Math.max(...byHour);
+  destroyChart('hours');
+  const hourCanvas = ensureCanvas(hourWrap);
+  state.charts['hours'] = new Chart(hourCanvas, {
+    type: 'bar',
+    data: {
+      labels: byHour.map((_, h) => String(h).padStart(2, '0')),
+      datasets: [{ label: 'Klik', data: byHour, backgroundColor: byHour.map(v => maxHour > 0 && v === maxHour ? '#10b981' : '#3b82f6'), borderRadius: 3 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${fmt(ctx.raw)} klik` } } },
+      scales: {
+        y: { beginAtZero: true, title: { display: true, text: 'Klik' } },
+        x: { title: { display: true, text: 'Jam (00-23)' } }
+      }
+    }
+  });
 }
 
 // --- DECISION TAB -----------------------------------------------
@@ -1524,7 +1595,7 @@ function renderDecisionTab() {
     <div class="decision-card">
       <div class="decision-card-header">
         <span class="decision-action-icon">${icon}</span>
-        <span class="decision-campaign-name">${c.name}</span>
+        <span class="decision-campaign-name">${esc(c.name)}</span>
         <span class="decision-action-badge ${actionClass}">${action}</span>
       </div>
       <div class="decision-metrics">
@@ -1609,6 +1680,70 @@ function filterProductTable() {
     tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
   });
 }
+
+// --- EXPORT: CSV & PNG ------------------------------------------
+function exportTableCSV(tableId, filename) {
+  const trs = [...document.querySelectorAll('#' + tableId + ' tr')];
+  if (trs.length === 0) { alert('Tabel masih kosong.'); return; }
+  const csv = trs.map(tr => {
+    return [...tr.querySelectorAll('th,td')].map(c => {
+      const txt = (c.innerText || '').replace(/\s+/g, ' ').trim();
+      return '"' + txt.replace(/"/g, '""') + '"';
+    }).join(',');
+  }).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM biar Excel baca UTF-8
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function exportChartPNG(card) {
+  const canvas = card.querySelector('.chart-wrap canvas');
+  if (!canvas) { alert('Chart belum ter-render (belum ada data).'); return; }
+  // Gambar ulang di canvas putih supaya PNG-nya gak transparan
+  const tmp = document.createElement('canvas');
+  tmp.width = canvas.width;
+  tmp.height = canvas.height;
+  const ctx = tmp.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, tmp.width, tmp.height);
+  ctx.drawImage(canvas, 0, 0);
+  const title = (card.querySelector('.chart-title')?.childNodes[0]?.textContent || 'chart').trim();
+  const a = document.createElement('a');
+  a.href = tmp.toDataURL('image/png');
+  a.download = title.replace(/[^\w\-]+/g, '_').slice(0, 50) + '.png';
+  a.click();
+}
+
+// Tombol export di-inject otomatis ke semua chart card & table card
+function setupExportButtons() {
+  document.querySelectorAll('.chart-card').forEach(card => {
+    const title = card.querySelector('.chart-title');
+    if (!title || title.querySelector('.btn-export')) return;
+    const btn = document.createElement('button');
+    btn.className = 'btn-export';
+    btn.type = 'button';
+    btn.textContent = '⬇ PNG';
+    btn.title = 'Download chart sebagai PNG';
+    btn.addEventListener('click', () => exportChartPNG(card));
+    title.appendChild(btn);
+  });
+  document.querySelectorAll('.table-card').forEach(card => {
+    const header = card.querySelector('.table-header');
+    const table = card.querySelector('table');
+    if (!header || !table || header.querySelector('.btn-export')) return;
+    const btn = document.createElement('button');
+    btn.className = 'btn-export';
+    btn.type = 'button';
+    btn.textContent = '⬇ CSV';
+    btn.title = 'Download tabel sebagai CSV (bisa dibuka di Excel)';
+    btn.addEventListener('click', () => exportTableCSV(table.id, 'affalitycs_' + table.id.replace('tbl-', '')));
+    header.appendChild(btn);
+  });
+}
+setupExportButtons();
 
 // --- TABS -------------------------------------------------------
 function switchTab(tabName, btn) {

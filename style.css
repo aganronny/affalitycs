@@ -398,6 +398,21 @@ body {
   color: var(--text-muted);
   margin-left: 6px;
 }
+.chart-title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.btn-export {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  background: var(--bg-page);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.15s;
+  font-family: var(--font);
+}
+.btn-export:hover { border-color: var(--primary); color: var(--primary); }
 .chart-wrap { position: relative; height: 280px; }
 .chart-wrap.tall { height: 380px; }
 

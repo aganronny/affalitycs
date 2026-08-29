@@ -7,7 +7,7 @@
   <meta name="description" content="Tool analisis ROAS dan profitabilitas untuk Shopee Affiliate yang menggunakan Facebook Ads. Upload dua file, langsung dapat insight." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260415" />
+  <link rel="stylesheet" href="style.css?v=20260829" />
 </head>
 <body>
   <!-- HEADER -->
@@ -251,6 +251,18 @@
           </div>
         </div>
 
+        <!-- Click Insights: Negara & Jam (butuh Click Report) -->
+        <div class="chart-row">
+          <div class="chart-card">
+            <div class="chart-title">🌍 Klik per Negara <span class="chart-hint">(dari Shopee Click Report, top 10)</span></div>
+            <div class="chart-wrap tall" id="chart-geo"></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-title">🕒 Klik per Jam <span class="chart-hint">(Waktu Klik, 00-23)</span></div>
+            <div class="chart-wrap tall" id="chart-hours"></div>
+          </div>
+        </div>
+
         <!-- Funnel per Campaign -->
         <div class="chart-card" style="margin-bottom:16px">
           <div class="chart-title-row">
@@ -373,6 +385,6 @@
   <!-- SCRIPTS -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=20260829"></script>
+  <script src="app.js?v=20260829b"></script>
 </body>
 </html>

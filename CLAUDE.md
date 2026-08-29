@@ -19,7 +19,7 @@ Tombol "Coba dengan Sample Data" memuat data demo yang di-generate di dalam `loa
 | File | Isi |
 |---|---|
 | `index.html` | UI tunggal: upload, modal mapping, dashboard 6 tab, loading overlay |
-| `app.js` | SEMUA logika (±1695 baris, v2.2): parsing CSV/XLSX, matching tag→campaign, agregasi, render semua chart & tabel |
+| `app.js` | SEMUA logika (±1690 baris, v2.3): parsing CSV/XLSX, matching tag→campaign, agregasi, render semua chart & tabel, export CSV/PNG |
 | `style.css` | Styling lengkap (tema terang, Inter font) |
 | `Stable/` | **Backup identik** dari app.js, index.html, style.css (bukan versi berbeda — diverifikasi byte-identical). Jangan edit di sini, edit file root |
 
@@ -49,6 +49,11 @@ Metrik inti:
 - `parseSpent` khusus kolom FB spend: '18.415' = delapan belas ribu (guard format id-ID). `parseNum` global sengaja TIDAK diubah — nilai Shopee 3 desimal ('962.745') harus tetap kebaca desimal
 
 Aturan rekomendasi otomatis (tab Rekomendasi): ROAS ≥3 SCALE UP, ≥2 SCALE, ≥1.2 MAINTAIN, ≥0.8 MONITOR, <0.8 PAUSE.
+
+Fitur tambahan v2.3:
+- Tab Perbandingan punya chart **Klik per Negara** (top 10, dari Wilayah Klik) & **Klik per Jam** (00-23) — keduanya butuh Click Report
+- Tombol **⬇ PNG** auto-inject di semua chart card, **⬇ CSV** di semua table card (BOM UTF-8, aman dibuka Excel)
+- Semua injeksi data user ke innerHTML wajib pakai helper `esc()` (nama produk/campaign bisa berisi `<`, `&`, `"`)
 
 ## Persistensi
 
