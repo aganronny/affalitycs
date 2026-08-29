@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v2.3 - Agustus 2026
+   v2.7 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -19,6 +19,7 @@ const state = {
   sortDir: {},
   dateRatio: 1,
   history: [],           // snapshot riwayat analisis (dari IndexedDB)
+  shopeeDupCount: 0,     // baris komisi identik yang dibuang saat upload
   _decisionCampaigns: [], // cache render terakhir tab Rekomendasi (untuk checklist)
 };
 
@@ -45,6 +46,61 @@ function hideLoading() {
 }
 function destroyChart(key) {
   if (state.charts[key]) { state.charts[key].destroy(); delete state.charts[key]; }
+}
+
+// --- CHART GLOBAL CONFIG ----------------------------------------
+if (window.Chart) {
+  Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+  Chart.defaults.scale.grid.color = 'rgba(148,163,184,0.14)';
+}
+if (window.ChartDataLabels) {
+  Chart.register(ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', { display: false }); // aktif manual per chart
+}
+const dlColor = () => document.documentElement.dataset.theme === 'dark' ? '#cbd5e1' : '#334155';
+
+// --- THEME (terang/gelap) ----------------------------------------
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem('affalitycs_theme', t); } catch (e) {}
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.textContent = t === 'dark' ? '☀️' : '🌙';
+  if (window.Chart) {
+    Chart.defaults.color = t === 'dark' ? '#cbd5e1' : '#475569';
+    Chart.defaults.borderColor = t === 'dark' ? 'rgba(148,163,184,0.15)' : 'rgba(148,163,184,0.18)';
+  }
+  // render ulang kalau dashboard lagi kebuka biar chart ikut tema
+  if (document.getElementById('section-dashboard') && document.getElementById('section-dashboard').style.display !== 'none' && typeof renderAll === 'function') {
+    renderAll();
+  }
+}
+function toggleTheme() {
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+}
+applyTheme(localStorage.getItem('affalitycs_theme') || 'light');
+
+// --- ANIMASI ANGKA KPI -------------------------------------------
+function animateCountUps() {
+  document.querySelectorAll('.kpi-value[data-count]').forEach(el => {
+    const target = parseFloat(el.dataset.count);
+    if (isNaN(target)) return;
+    const mode = el.dataset.format || 'plain';
+    const dur = 700;
+    const t0 = performance.now();
+    const render = (v) => {
+      if (mode === 'rupiah') return (v < 0 ? '-Rp ' : 'Rp ') + fmtK(Math.abs(v));
+      if (mode === 'roas') return fmtRoas(v);
+      return fmt(v);
+    };
+    el.textContent = render(0);
+    const step = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      const eased = 1 - Math.pow(1 - p, 3); // ease-out cubic
+      el.textContent = render(target * eased);
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
 }
 
 // --- FILE UPLOAD ------------------------------------------------
@@ -122,6 +178,11 @@ async function runAnalysis() {
       const text = await readAsText(f);
       state.shopeeRows.push(...parseShopeeCSV(text));
     }
+    // Dedup baris identik — file komisi yang overlap gak boleh dobel hitung
+    const deduped = dedupShopeeRows(state.shopeeRows);
+    state.shopeeRows = deduped.rows;
+    state.shopeeDupCount = deduped.removed;
+    if (deduped.removed > 0) console.log('[Shopee] Dibuang', deduped.removed, 'baris identik (file overlap)');
 
     state.fbCampaigns = [];
     state.fbBreakdown = [];
@@ -353,6 +414,7 @@ async function restoreSession() {
   state.fbCampaigns = s.fbCampaigns || [];
   state.fbBreakdown = s.fbBreakdown || [];
   state.clickReport = s.clickReport || [];
+  state.shopeeDupCount = 0;
   state.mapping = s.mapping || {};
   document.getElementById('filter-start').value = s.filterStart || '';
   document.getElementById('filter-end').value = s.filterEnd || '';
@@ -672,29 +734,31 @@ function renderKPIs() {
   const totalNilai  = state.filteredShopee.reduce((s, r) => s + r.nilaiPembelian, 0);
 
   const kpis = [
-    { label: 'Total Komisi Bersih', value: 'Rp ' + fmtK(totalKomisi), sub: 'dari semua campaign', color: 'green',
+    { label: 'Total Komisi Bersih', value: 'Rp ' + fmtK(totalKomisi), count: totalKomisi, format: 'rupiah', sub: 'dari semua campaign', color: 'green',
       badge: totalProfit >= 0 ? { text: 'Untung', cls: 'pos' } : { text: 'Rugi', cls: 'neg' } },
-    { label: 'Total Spend Iklan', value: 'Rp ' + fmtK(totalSpent), sub: 'Facebook Ads', color: 'orange' },
+    { label: 'Total Spend Iklan', value: 'Rp ' + fmtK(totalSpent), count: totalSpent, format: 'rupiah', sub: 'Facebook Ads', color: 'orange' },
     { label: 'Profit / Loss', value: (totalProfit >= 0 ? 'Rp ' : '-Rp ') + fmtK(Math.abs(totalProfit)),
+      count: totalProfit, format: 'rupiah',
       sub: totalProfit >= 0 ? '▲ profit' : '▼ rugi',
       color: totalProfit >= 0 ? 'green' : 'red',
       badge: totalProfit >= 0
         ? { text: '+' + fmtK(totalProfit), cls: 'pos' }
         : { text: '-' + fmtK(Math.abs(totalProfit)), cls: 'neg' }
     },
-    { label: 'Overall ROAS', value: fmtRoas(overallRoas), sub: 'komisi / spend', color: overallRoas && overallRoas >= 2 ? 'green' : 'orange' },
-    { label: 'Total Pesanan', value: fmt(totalOrders), sub: 'unique orders', color: 'blue' },
-    { label: 'Nilai Pembelian', value: 'Rp ' + fmtK(totalNilai), sub: 'total GMV', color: 'purple' },
+    { label: 'Overall ROAS', value: fmtRoas(overallRoas), count: overallRoas !== null && overallRoas !== undefined ? overallRoas : '', format: 'roas', sub: 'komisi / spend', color: overallRoas && overallRoas >= 2 ? 'green' : 'orange' },
+    { label: 'Total Pesanan', value: fmt(totalOrders), count: totalOrders, format: 'plain', sub: 'unique order valid', color: 'blue' },
+    { label: 'Nilai Pembelian', value: 'Rp ' + fmtK(totalNilai), count: totalNilai, format: 'rupiah', sub: 'total GMV', color: 'purple' },
   ];
 
   document.getElementById('kpi-grid').innerHTML = kpis.map(k => `
     <div class="kpi-card ${k.color}">
       <div class="kpi-label">${k.label}</div>
-      <div class="kpi-value">${k.value}</div>
+      <div class="kpi-value" data-count="${k.count ?? ''}" data-format="${k.format || 'plain'}">${k.value}</div>
       <div class="kpi-sub">${k.sub}</div>
       ${k.badge ? `<span class="kpi-badge ${k.badge.cls}">${k.badge.text}</span>` : ''}
     </div>
   `).join('');
+  animateCountUps();
 }
 
 // --- SMART REPORT (panel verdict di atas KPI) --------------------
@@ -716,6 +780,7 @@ function renderSmartReport() {
   const totalSpent = campaigns.reduce((s, c) => s + c.spent, 0);
   const totalKomisi = campaigns.reduce((s, c) => s + c.komisi, 0);
   const profit = totalKomisi - totalSpent;
+  el.style.borderLeftColor = totalSpent === 0 ? '' : (profit >= 0 ? '#10b981' : '#ef4444');
   const roas = totalSpent > 0 ? totalKomisi / totalSpent : null;
 
   // Komisi cair vs pending vs gagal — dari kolom Status Pesanan di file komisi yang SAMA
@@ -806,9 +871,14 @@ function renderCampaignTab() {
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' }, tooltip: { callbacks: {
-          label: (ctx) => ctx.dataset.label === 'ROAS' ? `ROAS: ${ctx.raw}x` : 'Break-even'
-        }}},
+        plugins: {
+          legend: { position: 'top' },
+          tooltip: { callbacks: {
+            label: (ctx) => ctx.dataset.label === 'ROAS' ? `ROAS: ${ctx.raw}x` : 'Break-even'
+          }},
+          datalabels: { display: true, anchor: 'end', align: 'end', offset: -2, color: dlColor(),
+            font: { weight: 700, size: 10 }, formatter: (v) => v ? v.toFixed(2) + 'x' : '' }
+        },
         scales: { y: { beginAtZero: true, title: { display: true, text: 'ROAS (x)' } } }
       }
     });
@@ -886,7 +956,7 @@ function getStatusBadge(roas, spent) {
 }
 
 // --- PRODUCT TAB ------------------------------------------------
-function renderProductTab() {
+function computeProductRows() {
   const byProduct = {};
   const fbNameSet = new Set(state.filteredFb.map(c => c.campaignName));
   state.filteredShopee.forEach(r => {
@@ -898,10 +968,13 @@ function renderProductTab() {
     const { key: campKey } = resolveShopeeKey(r, fbNameSet, state.mapping);
     byProduct[key].campaigns.add(campKey);
   });
-
-  const products = Object.values(byProduct)
+  return Object.values(byProduct)
     .map(p => ({ ...p, orders: p.orders.size, campaigns: [...p.campaigns] }))
     .sort((a, b) => b.orders - a.orders);
+}
+
+function renderProductTab() {
+  const products = computeProductRows();
 
   destroyChart('topProduct');
   const ctxTP = document.getElementById('chart-top-product');
@@ -1012,6 +1085,8 @@ function renderComparisonTab() {
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { position: 'top' },
+            datalabels: { display: true, anchor: 'end', align: 'end', color: dlColor(),
+              font: { size: 9, weight: 600 }, formatter: (v) => v ? fmt(v) : '' },
             tooltip: { callbacks: { label: (ctx) => {
               const i = ctx.dataIndex;
               const c = hasFbData[i];
@@ -1318,6 +1393,17 @@ function renderTrendTab() {
 }
 
 // --- STATUS TAB -------------------------------------------------
+function computeStatusRows() {
+  const byStatus = {};
+  state.filteredShopee.forEach(r => {
+    if (!byStatus[r.status]) byStatus[r.status] = { count: 0, komisi: 0, orders: new Set() };
+    byStatus[r.status].orders.add(r.orderId);
+    byStatus[r.status].komisi += r.komisiBersih;
+  });
+  return Object.entries(byStatus).map(([status, v]) => ({ status, count: v.orders.size, komisi: v.komisi }))
+    .sort((a, b) => b.count - a.count);
+}
+
 function renderStatusTab() {
   const byStatus = {};
   state.filteredShopee.forEach(r => {
@@ -1440,6 +1526,12 @@ function renderSanity() {
   const el = document.getElementById('sanity-warnings');
   if (!el) return;
   const warns = [];
+
+  // 0. Baris komisi identik yang dibuang saat upload
+  if (state.shopeeDupCount > 0) {
+    warns.push({ type: 'warn', icon: '📄',
+      text: `<strong>${state.shopeeDupCount} baris komisi identik dibuang</strong> — kemungkinan lo upload file komisi yang periodenya overlap. Angka di dashboard sudah dibersihkan.` });
+  }
 
   // 1. Kemungkinan spend dobel: campaign+tanggal sama muncul >1x di data FB
   const seen = new Map();
@@ -1783,6 +1875,71 @@ function filterProductTable() {
 }
 
 // --- EXPORT: CSV & PNG ------------------------------------------
+// Excel multi-sheet: Ringkasan + Per Campaign + Per Produk + Status + Riwayat
+function exportExcel() {
+  try {
+    const camps = buildCampaignData().filter(c => c.spent > 0 || c.orders > 0);
+    if (camps.length === 0) { alert('Belum ada data buat diexport.'); return; }
+    const wb = XLSX.utils.book_new();
+
+    // Ringkasan
+    const totalSpent = camps.reduce((s, c) => s + c.spent, 0);
+    const totalKomisi = camps.reduce((s, c) => s + c.komisi, 0);
+    const st = computeStatusRows();
+    const cair = st.filter(s => /selesai/i.test(s.status)).reduce((s, r) => s + r.komisi, 0);
+    const pending = st.filter(s => /tertu|belum dibayar/i.test(s.status)).reduce((s, r) => s + r.komisi, 0);
+    const start = document.getElementById('filter-start').value;
+    const end = document.getElementById('filter-end').value;
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+      { Metrik: 'Periode', Nilai: (start || '…') + ' s/d ' + (end || '…') },
+      { Metrik: 'Total Spend FB', Nilai: Math.round(totalSpent) },
+      { Metrik: 'Total Komisi Bersih', Nilai: Math.round(totalKomisi) },
+      { Metrik: 'Profit / Loss', Nilai: Math.round(totalKomisi - totalSpent) },
+      { Metrik: 'ROAS', Nilai: totalSpent > 0 ? +(totalKomisi / totalSpent).toFixed(2) : '' },
+      { Metrik: 'Komisi Cair (Selesai)', Nilai: Math.round(cair) },
+      { Metrik: 'Komisi Pending', Nilai: Math.round(pending) },
+      { Metrik: 'Total Order Valid', Nilai: new Set(state.filteredShopee.filter(isCountableOrder).map(r => r.orderId)).size },
+    ]), 'Ringkasan');
+
+    // Per Campaign
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(camps.map(c => ({
+      Campaign: c.name, Spend: Math.round(c.spent), Orders: c.orders,
+      Komisi: Math.round(c.komisi), Profit: Math.round(c.profit),
+      ROAS: c.roas !== null ? +c.roas.toFixed(2) : '',
+      CPO: c.cpo !== null ? Math.round(c.cpo) : '',
+      Impresi: c.fb ? c.fb.impressions : '', Klik_FB: c.fb ? c.fb.linkClicks : '',
+      CTR_pct: c.fb ? +c.fb.ctr.toFixed(2) : '',
+      Klik_Masuk_Shopee: c.stage2Value > 0 ? c.stage2Value : '',
+      Klik_per_Order: (c.fb && c.fb.linkClicks > 0 && c.orders > 0) ? Math.round(c.fb.linkClicks / c.orders) : '',
+      Komisi_per_1k_Klik: (c.fb && c.fb.linkClicks > 0) ? Math.round(c.komisi / c.fb.linkClicks * 1000) : '',
+    }))), 'Per Campaign');
+
+    // Per Produk
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(computeProductRows().map(p => ({
+      Produk: p.name, Kategori: p.kategori, Orders: p.orders,
+      Nilai_Pembelian: Math.round(p.nilai), Komisi: Math.round(p.komisi),
+      Campaign: p.campaigns.join(', '),
+    }))), 'Per Produk');
+
+    // Status Pesanan
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(st.map(s => ({
+      Status: s.status, Orders: s.count, Komisi: Math.round(s.komisi),
+    }))), 'Status Pesanan');
+
+    // Riwayat
+    if (state.history.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.history.map(h => ({
+        Periode: (h.start || '…') + ' s/d ' + (h.end || '…'),
+        Spend: Math.round(h.spent), Komisi: Math.round(h.komisi),
+        Profit: Math.round(h.profit), ROAS: h.roas !== null && h.roas !== undefined ? +h.roas.toFixed(2) : '',
+        Orders: h.orders, Hari: h.days, Disimpan: new Date(h.savedAt).toLocaleString('id-ID'),
+      }))), 'Riwayat');
+    }
+
+    XLSX.writeFile(wb, 'Affalitycs_' + (start || '') + (end ? '_' + end : '') + '.xlsx');
+  } catch (e) { alert('Export Excel gagal: ' + e.message); }
+}
+
 function exportTableCSV(tableId, filename) {
   const trs = [...document.querySelectorAll('#' + tableId + ' tr')];
   if (trs.length === 0) { alert('Tabel masih kosong.'); return; }
@@ -1870,6 +2027,7 @@ function resetAll() {
   shopeeFiles = []; fbFiles = []; clickFiles = [];
   state.shopeeRows = []; state.fbCampaigns = []; state.clickReport = [];
   state.fbBreakdown = []; state.filteredFbBreakdown = [];
+  state.shopeeDupCount = 0;
   state.filteredShopee = []; state.filteredFb = []; state.filteredClicks = [];
   Object.keys(state.charts).forEach(k => { try { state.charts[k].destroy(); } catch {} });
   state.charts = {};

@@ -1,6 +1,42 @@
 /* ============================================
-   AFFALITYCS — CSS Design System (Light Mode)
+   AFFALITYCS — CSS Design System (Light + Dark)
+   Font Inter variabel — file lokal, offline
    ============================================ */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('vendor/inter-latin-wght-normal.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── DARK THEME ── */
+:root[data-theme="dark"] {
+  --bg-page: #0f172a;
+  --bg-card: #1e293b;
+  --bg-header: #16213a;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border: #334155;
+  --border-light: #26334a;
+  --primary-ultra-light: rgba(99, 102, 241, 0.14);
+  --shadow-sm: none;
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+:root[data-theme="dark"] body { background: var(--bg-page); }
+:root[data-theme="dark"] .sanity-warn { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.35); color: #fbbf24; }
+:root[data-theme="dark"] .sanity-info { background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.35); color: #93c5fd; }
+:root[data-theme="dark"] .badge-gray { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+:root[data-theme="dark"] .kpi-badge.neu { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+:root[data-theme="dark"] .action-nodata { background: rgba(148, 163, 184, 0.12); color: #94a3b8; }
+:root[data-theme="dark"] .cl-card,
+:root[data-theme="dark"] .sr-item { background: rgba(15, 23, 42, 0.55); }
+:root[data-theme="dark"] .table-wrap { background: transparent; }
+:root[data-theme="dark"] .btn-export { background: transparent; }
+:root[data-theme="dark"] .chart-empty { color: var(--text-muted); }
 
 :root {
   --primary: #4f46e5;
@@ -1127,3 +1163,55 @@ tbody tr:hover td { background: var(--primary-ultra-light); }
 }
 
 
+/* ── POLISH v2.6 ── */
+.theme-toggle {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.theme-toggle:hover { border-color: var(--primary); transform: translateY(-1px); }
+.header-meta { display: flex; align-items: center; gap: 10px; }
+
+.kpi-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.kpi-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
+
+.tab-content.active { animation: tabIn 0.25s ease; }
+@keyframes tabIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Angka sejajar rapi di semua kolom nilai */
+.kpi-value, .table-card td, .dm-value, .cl-value,
+.status-card-komisi, .kpi-badge {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.decision-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.decision-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+/* Print: paksa tema terang walau dark mode aktif */
+@media print {
+  :root, :root[data-theme="dark"] {
+    --bg-page: #ffffff;
+    --bg-card: #ffffff;
+    --bg-header: #ffffff;
+    --text-primary: #1e293b;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --border: #d7dce3;
+    --border-light: #eef1f5;
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
+  }
+}

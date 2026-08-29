@@ -1,10 +1,10 @@
 # Affalitycs
 
-Dashboard analisis **Shopee Affiliate × Facebook Ads** untuk menghitung ROAS, profit, dan rekomendasi aksi per campaign. Aplikasi 100% client-side (HTML + JS + CSS), tanpa backend, tanpa build step — buka `index.html` di browser langsung jalan.
+Dashboard analisis **Shopee Affiliate × Facebook Ads** untuk menghitung ROAS, profit, dan rekomendasi aksi per campaign. Aplikasi 100% client-side (HTML + JS + CSS), tanpa backend, tanpa build step, **100% offline** (semua library lokal) — buka `index.html` di browser langsung jalan.
 
 ## Cara Pakai
 
-1. Buka `index.html` di browser (butuh internet untuk CDN Chart.js & XLSX)
+1. Buka `index.html` di browser (tidak butuh internet sama sekali)
 2. Upload minimal salah satu:
    - **Shopee Affiliate Report** (CSV komisi, bisa banyak file)
    - **Facebook Ads Report** (XLSX/XLS/CSV dari Meta Ads Manager, bisa banyak file)
@@ -23,11 +23,13 @@ Tombol "Coba dengan Sample Data" memuat data demo yang di-generate di dalam `loa
 | `app.js` | SEMUA logika UI (±1560 baris, v2.5): state, upload, filter, render semua chart & tabel, export CSV/PNG, persistensi sesi |
 | `style.css` | Styling lengkap (tema terang, Inter font) |
 | `tests/parsers.test.js` | Unit test parser (tanpa framework) — jalan: `node tests\parsers.test.js` |
+| `vendor/` | Library lokal (Chart.js, datalabels plugin, SheetJS, font Inter) — biar 100% offline. Jangan edit |
 | `Stable/` | **Backup versi stabil lama** (v2.2, sebelum split & fitur v2.3+). Jangan edit di sini, edit file root |
 
-Library eksternal via CDN:
-- Chart.js 4.4.0 (semua chart)
-- SheetJS/xlsx 0.18.5 (baca XLSX FB Ads)
+Library eksternal — semua **lokal** di `vendor/` (bukan CDN):
+- Chart.js 4.4.0 + chartjs-plugin-datalabels 2.2.0 (semua chart; datalabels default off, aktif manual per chart)
+- SheetJS/xlsx 0.18.5 (baca XLSX FB Ads + export Excel multi-sheet)
+- Inter Variable font (woff2)
 
 ## Arsitektur app.js
 
@@ -72,6 +74,15 @@ Fitur v2.6 (guard & riwayat):
 - **Prefill breakeven**: tombol "⟳ Pakai rata-rata data" isi budget harian & komisi/order dari data asli
 - **🖨️ Cetak / PDF**: window.print() + `@media print` (sembunyikan filter/tab/upload, cetak Smart Report + KPI + tab aktif)
 - **Mobile responsive**: `@media (max-width: 768px)` — KPI 2 kolom, chart 1 kolom, tabel scroll horizontal
+
+Fitur v2.7 (offline & polish):
+- **Dedup baris komisi** (`dedupShopeeRows` di parsers.js): upload file komisi overlap gak dobel hitung; jumlah baris yang dibuang muncul sebagai sanity warning (`state.shopeeDupCount`)
+- **100% offline**: Chart.js, datalabels, SheetJS, dan font Inter di-serve dari `vendor/` — nol request internet
+- **Dark mode**: toggle 🌙 di header, tersimpan di `localStorage` key `affalitycs_theme`; chart ikut tema via `Chart.defaults.color`; print selalu paksa tema terang via override variabel di `@media print`
+- **Export Excel multi-sheet**: tombol 📗 → 1 file .xlsx berisi sheet Ringkasan / Per Campaign / Per Produk / Status Pesanan / Riwayat
+- **Animasi angka KPI**: count-up 700ms ease-out (`animateCountUps()`), lewat atribut `data-count`/`data-format`
+- **Datalabels**: nilai di atas batang chart ROAS & funnel
+- Polish: angka tabular-nums, hover lift di KPI & decision card, animasi pindah tab, favicon, badge header jadi "v2.6+"
 
 ## Persistensi
 

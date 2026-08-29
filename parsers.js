@@ -355,6 +355,23 @@ function extractFbRows(raw) {
   return campaigns;
 }
 
+// --- DEDUP BARIS KOMISI -----------------------------------------
+// Upload file komisi yang periodenya overlap = order sama kehitung komisi 2x.
+// Baris identik (order+produk+nilai sama persis) dianggap duplikat.
+function dedupShopeeRows(rows) {
+  const seen = new Set();
+  const out = [];
+  let removed = 0;
+  rows.forEach(r => {
+    const k = [r.orderId, r.status, r.date, r.toko, r.barang, r.harga, r.jumlah,
+      r.nilaiPembelian, r.komisiBersih, r.tag1, r.tag3, r.platform].join('¦');
+    if (seen.has(k)) { removed++; return; }
+    seen.add(k);
+    out.push(r);
+  });
+  return { rows: out, removed };
+}
+
 // --- RESOLVE SHOPEE KEY -----------------------------------------
 function resolveShopeeKey(row, fbNameSet, mapping) {
   const tag1 = (row.tag1 || '').trim();
@@ -393,7 +410,7 @@ function resolveShopeeKey(row, fbNameSet, mapping) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     fmt, fmtK, fmtRoas, parseNum, parseSpent, esc, normalizeName, splitCSVLine,
-    parseShopeeCSV, parseClickReportCSV,
+    parseShopeeCSV, parseClickReportCSV, dedupShopeeRows,
     fbRawFromCSV, fbRawFromXLSX, parseFbCSV, parseFbXLSX, extractFbRows,
     FB_AGE_ORDER, normalizeFbGender, extractFbBreakdown, parseFbBreakdownCSV, parseFbBreakdownXLSX,
     resolveShopeeKey, resolveClickKey,
