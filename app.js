@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v3.2 - Agustus 2026
+   v3.2.1 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -479,6 +479,9 @@ function saveMapping(m) {
 // --- PERSISTENSI SESI (IndexedDB) --------------------------------
 // Data upload disimpan lokal di browser biar refresh gak perlu upload ulang.
 // Murni storage browser ini — gak ada data yang dikirim ke mana pun.
+// PARSER_VERSION naik tiap kali format hasil parse berubah — sesi lama
+// dikasih warning biar user tahu harus upload ulang.
+const PARSER_VERSION = 2;
 function idbOpen() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('affalitycs', 2);
@@ -497,6 +500,7 @@ async function saveSession() {
     const db = await idbOpen();
     const data = {
       savedAt: Date.now(),
+      parserVersion: PARSER_VERSION,
       shopeeRows: state.shopeeRows,
       fbCampaigns: state.fbCampaigns,
       fbBreakdown: state.fbBreakdown,
@@ -555,6 +559,7 @@ async function restoreSession() {
   state.clickReport = s.clickReport || [];
   state.shopeeDupCount = 0;
   state.mapping = s.mapping || {};
+  state.sessionStale = s.parserVersion !== PARSER_VERSION; // sesi dari parser lama = fitur baru butuh data segar
   setRange(s.filterStart || '', s.filterEnd || '');
   document.getElementById('ppn-toggle').checked = !!s.ppn;
   const vo = document.getElementById('valid-orders-toggle');
@@ -1568,6 +1573,12 @@ function renderSanity() {
   const el = document.getElementById('sanity-warnings');
   if (!el) return;
   const warns = [];
+
+  // 0a. Sesi dari versi parser lama — fitur baru butuh data yang di-parse ulang
+  if (state.sessionStale) {
+    warns.push({ type: 'warn', icon: '📦',
+      text: `<strong>Sesi ini dibuat dengan versi aplikasi lama.</strong> Beberapa fitur baru (mis. analisis order per jam) butuh data yang di-parse ulang. Klik <strong>↩️ Upload Ulang</strong> lalu upload file yang sama — semua angka tetap, malah lebih lengkap.` });
+  }
 
   // 0. Baris komisi identik yang dibuang saat upload
   if (state.shopeeDupCount > 0) {
