@@ -75,6 +75,11 @@ Fitur v2.6 (guard & riwayat):
 - **🖨️ Cetak / PDF**: window.print() + `@media print` (sembunyikan filter/tab/upload, cetak Smart Report + KPI + tab aktif)
 - **Mobile responsive**: `@media (max-width: 768px)` — KPI 2 kolom, chart 1 kolom, tabel scroll horizontal
 
+Fitur v2.9 (range picker):
+- **Filter tanggal 1 tombol**: klik → dropdown berisi preset sekali-klik (Hari terakhir / 7 hari / 30 hari / Semua data — anchor-nya tanggal data terakhir, bukan hari ini) + kalender mini (mulai Senin). Klik awal → klik akhir → otomatis apply
+- `filter-start`/`filter-end` (input date tersembunyi) tetap SATU SUMBER KEBENARAN semua logika filter — picker cuma lapisan tampilan. Set tanggal programatik WAJIB lewat `setRange()` (bukan set .value langsung) biar label tombol ikut ter-update
+- Filter bar 2 zona: kiri = range picker + toggle (PPN, order valid), kanan = tombol aksi (Reset/Mapping/PDF/Excel/Upload) dipisah border kiri, `margin-left: auto`
+
 Fitur v2.7 (offline & polish):
 - **Dedup baris komisi** (`dedupShopeeRows` di parsers.js): upload file komisi overlap gak dobel hitung; jumlah baris yang dibuang muncul sebagai sanity warning (`state.shopeeDupCount`)
 - **100% offline**: Chart.js, datalabels, SheetJS, dan font Inter di-serve dari `vendor/` — nol request internet

@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v2.8 - Agustus 2026
+   v2.9 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -102,6 +102,141 @@ function animateCountUps() {
     requestAnimationFrame(step);
   });
 }
+
+// --- RANGE PICKER -------------------------------------------------
+// 1 tombol + preset + kalender. Input filter-start/filter-end tetap ada
+// (disembunyikan) sebagai sumber kebenaran semua logika filter.
+function ymdLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function parseYmd(s) {
+  if (!s) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function addDaysYmd(ymdStr, n) {
+  const d = parseYmd(ymdStr);
+  d.setDate(d.getDate() + n);
+  return ymdLocal(d);
+}
+function todayYmd() { return ymdLocal(new Date()); }
+
+function setRange(start, end) {
+  document.getElementById('filter-start').value = start || '';
+  document.getElementById('filter-end').value = end || '';
+  updateRangeLabel();
+}
+
+function updateRangeLabel() {
+  const btn = document.getElementById('range-btn');
+  if (!btn) return;
+  const s = document.getElementById('filter-start').value;
+  const e = document.getElementById('filter-end').value;
+  if (!s && !e) { btn.textContent = '📅 Semua tanggal'; return; }
+  const fmtId = (ymdStr) => {
+    const d = parseYmd(ymdStr);
+    return d ? d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : (ymdStr || '…');
+  };
+  btn.textContent = (s && s === e) ? `📅 ${fmtId(s)}` : `📅 ${fmtId(s)} → ${fmtId(e)}`;
+}
+
+function toggleRangePicker(ev) {
+  if (ev) ev.stopPropagation();
+  const panel = document.getElementById('range-panel');
+  if (!panel) return;
+  if (panel.style.display === 'block') { closeRangePicker(); return; }
+  const s = document.getElementById('filter-start').value;
+  const e = document.getElementById('filter-end').value;
+  state._rpStart = s || null;
+  state._rpEnd = (s && e && e >= s) ? e : null;
+  const anchorStr = s || state.shopeeRows.map(r => r.date).filter(Boolean).sort().pop() || todayYmd();
+  const anchor = parseYmd(anchorStr);
+  state._rpCursor = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  panel.style.display = 'block';
+  renderRangePanel();
+}
+function closeRangePicker() {
+  const panel = document.getElementById('range-panel');
+  if (panel) panel.style.display = 'none';
+}
+function rpNav(dir) {
+  state._rpCursor.setMonth(state._rpCursor.getMonth() + dir);
+  renderRangePanel();
+}
+function rpClickDay(ymdStr) {
+  if (!state._rpStart || (state._rpStart && state._rpEnd)) {
+    state._rpStart = ymdStr;
+    state._rpEnd = null;
+  } else if (ymdStr < state._rpStart) {
+    state._rpStart = ymdStr;
+  } else {
+    state._rpEnd = ymdStr;
+    setRange(state._rpStart, state._rpEnd);
+    applyFilters();
+    closeRangePicker();
+    return;
+  }
+  renderRangePanel();
+}
+function rpPreset(i) {
+  const dates = state.shopeeRows.map(r => r.date).filter(Boolean).sort();
+  const anchor = dates.length ? dates[dates.length - 1] : todayYmd();
+  const fns = [
+    () => [anchor, anchor],
+    () => [addDaysYmd(anchor, -6), anchor],
+    () => [addDaysYmd(anchor, -29), anchor],
+    () => ['', ''],
+  ];
+  const [s, e] = fns[i]();
+  setRange(s, e);
+  applyFilters();
+  closeRangePicker();
+}
+function renderRangePanel() {
+  const panel = document.getElementById('range-panel');
+  if (!panel) return;
+  const cursor = state._rpCursor;
+  const y = cursor.getFullYear(), m = cursor.getMonth();
+  const monthLabel = cursor.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+  const first = new Date(y, m, 1);
+  const offset = (first.getDay() + 6) % 7; // minggu mulai Senin
+  const startCell = new Date(y, m, 1 - offset);
+  const today = todayYmd();
+  const s = state._rpStart, e = state._rpEnd;
+  let cells = '';
+  ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].forEach(w => { cells += `<div class="rp-wd">${w}</div>`; });
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(startCell.getFullYear(), startCell.getMonth(), startCell.getDate() + i);
+    const ymd = ymdLocal(d);
+    const cls = [
+      d.getMonth() !== m ? ' muted' : '',
+      (ymd === s || ymd === e) ? ' sel' : '',
+      (s && e && ymd > s && ymd < e) ? ' inrange' : '',
+      ymd === today ? ' today' : '',
+    ].join('');
+    cells += `<button type="button" class="rp-day${cls}" onclick="rpClickDay('${ymd}')">${d.getDate()}</button>`;
+  }
+  panel.innerHTML = `
+    <div class="rp-presets">
+      <button type="button" class="rp-chip" title="Tanggal data terakhir saja" onclick="rpPreset(0)">Hari terakhir</button>
+      <button type="button" class="rp-chip" onclick="rpPreset(1)">7 hari</button>
+      <button type="button" class="rp-chip" onclick="rpPreset(2)">30 hari</button>
+      <button type="button" class="rp-chip" onclick="rpPreset(3)">Semua data</button>
+    </div>
+    <div class="rp-head">
+      <button type="button" class="rp-nav" onclick="rpNav(-1)">‹</button>
+      <div class="rp-month">${monthLabel}</div>
+      <button type="button" class="rp-nav" onclick="rpNav(1)">›</button>
+    </div>
+    <div class="rp-grid">${cells}</div>
+    <div class="rp-foot">Klik tanggal awal, lalu tanggal akhir</div>`;
+}
+document.addEventListener('click', (ev) => {
+  const panel = document.getElementById('range-panel');
+  if (!panel || panel.style.display !== 'block') return;
+  if (!ev.target.closest('.range-wrap')) closeRangePicker();
+});
+document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeRangePicker(); });
 
 // --- FILE UPLOAD ------------------------------------------------
 let shopeeFiles = [], fbFiles = [], clickFiles = [];
@@ -416,8 +551,7 @@ async function restoreSession() {
   state.clickReport = s.clickReport || [];
   state.shopeeDupCount = 0;
   state.mapping = s.mapping || {};
-  document.getElementById('filter-start').value = s.filterStart || '';
-  document.getElementById('filter-end').value = s.filterEnd || '';
+  setRange(s.filterStart || '', s.filterEnd || '');
   document.getElementById('ppn-toggle').checked = !!s.ppn;
   const vo = document.getElementById('valid-orders-toggle');
   if (vo) vo.checked = s.validOrders !== false;
@@ -498,8 +632,7 @@ function buildDashboard(opts = {}) {
   if (!opts.keepFilters) {
     const dates = state.shopeeRows.map(r => r.date).filter(Boolean).sort();
     if (dates.length > 0) {
-      document.getElementById('filter-start').value = dates[0];
-      document.getElementById('filter-end').value = dates[dates.length - 1];
+      setRange(dates[0], dates[dates.length - 1]);
       document.getElementById('last-updated').textContent =
         `Data: ${dates[0]} - ${dates[dates.length - 1]}`;
     }
@@ -1922,8 +2055,7 @@ function switchTab(tabName, btn) {
 function resetFilters() {
   const dates = state.shopeeRows.map(r => r.date).filter(Boolean).sort();
   if (dates.length > 0) {
-    document.getElementById('filter-start').value = dates[0];
-    document.getElementById('filter-end').value   = dates[dates.length - 1];
+    setRange(dates[0], dates[dates.length - 1]);
   }
   applyFilters();
 }

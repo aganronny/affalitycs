@@ -6,7 +6,7 @@
   <title>Affalitycs — Shopee Affiliate × Facebook Ads Dashboard</title>
   <meta name="description" content="Tool analisis ROAS dan profitabilitas untuk Shopee Affiliate yang menggunakan Facebook Ads. Upload dua file, langsung dapat insight." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%234f46e5'/%3E%3Ctext x='50' y='70' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'%3EA%3C/text%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="style.css?v=20260829e" />
+  <link rel="stylesheet" href="style.css?v=20260829f" />
 </head>
 <body>
   <!-- HEADER -->
@@ -15,7 +15,7 @@
       <div class="logo">
         <span class="logo-icon">📊</span>
         <span class="logo-text">Affalitycs</span>
-        <span class="logo-badge">v2.8</span>
+        <span class="logo-badge">v2.9</span>
       </div>
       <div class="header-meta">
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Ganti tema terang/gelap">🌙</button>
@@ -115,10 +115,12 @@
       <!-- Date Filter Bar -->
       <div class="filter-bar">
         <div class="filter-group">
-          <div class="filter-title">📅 Rentang Tanggal</div>
-          <input type="date" id="filter-start" class="date-input" onchange="applyFilters()" />
-          <span class="filter-sep">—</span>
-          <input type="date" id="filter-end" class="date-input" onchange="applyFilters()" />
+          <div class="range-wrap">
+            <button type="button" class="btn-ghost range-btn" id="range-btn" onclick="toggleRangePicker(event)" title="Pilih rentang tanggal">📅 Rentang tanggal</button>
+            <div class="range-panel" id="range-panel" style="display:none"></div>
+          </div>
+          <input type="date" id="filter-start" style="display:none" />
+          <input type="date" id="filter-end" style="display:none" />
           <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:#64748b;margin:0 6px;cursor:pointer;">
             <input type="checkbox" id="ppn-toggle" onchange="applyFilters()" style="cursor:pointer;" /> +PPN 11% (FB)
           </label>
@@ -422,6 +424,6 @@
   <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="parsers.js?v=20260829c"></script>
-  <script src="app.js?v=20260829g"></script>
+  <script src="app.js?v=20260829h"></script>
 </body>
 </html>
