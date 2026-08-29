@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v3.1 - Agustus 2026
+   v3.2 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -607,6 +607,11 @@ async function saveSnapshot() {
       profit: totalKomisi - totalSpent,
       roas: totalSpent > 0 ? totalKomisi / totalSpent : null,
       days: daysInPeriod(), cair, pending,
+      // per-campaign — buat kolom delta "vs periode lalu" di tabel
+      campaigns: camps.map(c => ({
+        name: c.name, spent: Math.round(c.spent), orders: c.orders,
+        komisi: Math.round(c.komisi), roas: c.roas !== null && c.roas !== undefined ? +c.roas.toFixed(4) : null,
+      })),
     };
     const i = state.history.findIndex(h => h.key === snap.key);
     if (i >= 0) state.history[i] = snap; else state.history.push(snap);
@@ -625,6 +630,61 @@ async function clearHistory() {
   } catch (e) {}
   state.history = [];
   renderAll();
+}
+
+// --- BACKUP / RESTORE (file JSON) ---------------------------------
+// Data terkurung di browser perangkat ini — backup bikin dia portable.
+function backupData() {
+  try {
+    const bundle = {
+      app: 'affalitycs', version: 1, exportedAt: new Date().toISOString(),
+      history: state.history || [],
+      mapping: loadMapping(),
+    };
+    const ses = {
+      shopeeRows: state.shopeeRows, fbCampaigns: state.fbCampaigns,
+      fbBreakdown: state.fbBreakdown, clickReport: state.clickReport,
+      filterStart: document.getElementById('filter-start').value,
+      filterEnd: document.getElementById('filter-end').value,
+      ppn: document.getElementById('ppn-toggle').checked,
+      validOrders: document.getElementById('valid-orders-toggle')?.checked !== false,
+    };
+    if (ses.shopeeRows.length || ses.fbCampaigns.length || ses.clickReport.length) bundle.session = ses;
+    const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'affalitycs-backup-' + todayYmd().replace(/-/g, '') + '.json';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { alert('Backup gagal: ' + e.message); }
+}
+
+async function restoreData(file) {
+  try {
+    const bundle = JSON.parse(await file.text());
+    if (!bundle || bundle.app !== 'affalitycs') { alert('File ini bukan backup Affalitycs.'); return; }
+    const db = await idbOpen();
+    let nHist = 0;
+    if (Array.isArray(bundle.history)) {
+      const store = db.transaction('history', 'readwrite').objectStore('history');
+      bundle.history.forEach(h => { if (h && h.key) { store.put(h, h.key); nHist++; } });
+      const byKey = {};
+      (state.history || []).concat(bundle.history.filter(h => h && h.key)).forEach(h => { byKey[h.key] = h; });
+      state.history = Object.values(byKey).sort((a, b) => (a.end || '').localeCompare(b.end || ''));
+    }
+    if (bundle.mapping) {
+      saveMapping({ ...loadMapping(), ...bundle.mapping });
+      state.mapping = loadMapping();
+    }
+    const ses = bundle.session;
+    if (ses && ((ses.shopeeRows || []).length || (ses.fbCampaigns || []).length || (ses.clickReport || []).length)) {
+      db.transaction('session', 'readwrite').objectStore('session').put(ses, 'current');
+      restoreSession(); // pulihkan sesi + tampilkan dashboard
+      return;
+    }
+    alert('Restore selesai: ' + nHist + ' snapshot riwayat dipulihkan.');
+    renderAll();
+  } catch (e) { alert('Restore gagal — file rusak atau bukan backup yang valid. (' + e.message + ')'); }
 }
 
 checkResume();
@@ -902,6 +962,15 @@ function daysInPeriod() {
   ]).size || 1;
 }
 
+// Snapshot riwayat terakhir yang periode-nya selesai SEBELUM periode sekarang mulai
+function getPrevSnapshot() {
+  const startCur = document.getElementById('filter-start').value;
+  if (!startCur || !state.history || !state.history.length) return null;
+  return state.history
+    .filter(h => h.end && h.end < startCur && h.roas !== null && h.roas !== undefined)
+    .sort((a, b) => (b.end || '').localeCompare(a.end || ''))[0] || null;
+}
+
 function renderSmartReport() {
   const el = document.getElementById('smart-report');
   if (!el) return;
@@ -944,18 +1013,13 @@ function renderSmartReport() {
 
   // Perbandingan dengan periode tersimpan sebelumnya
   let prevItem = '';
-  const startCur = document.getElementById('filter-start').value;
-  if (startCur && state.history && state.history.length > 0) {
-    const prev = state.history
-      .filter(h => h.end && h.end < startCur && h.roas !== null && h.roas !== undefined)
-      .sort((a, b) => (b.end || '').localeCompare(a.end || ''))[0];
-    if (prev && roas !== null) {
+  const prev = getPrevSnapshot();
+  if (prev && roas !== null) {
       const dr = prev.roas > 0 ? ((roas - prev.roas) / prev.roas * 100) : null;
       const roasColor = dr !== null && dr < 0 ? '#ef4444' : '#10b981';
       prevItem = `<div class="sr-item"><div class="sr-label">📅 vs periode sebelumnya (${esc(prev.start || '…')} – ${esc(prev.end || '…')})</div>
         ROAS ${prev.roas.toFixed(2)}x → <strong>${roas.toFixed(2)}x</strong>${dr !== null ? ` <span style="color:${roasColor};font-weight:700">(${dr >= 0 ? '+' : ''}${dr.toFixed(0)}%)</span>` : ''}
         ${prev.spent > 0 ? `<div style="font-size:12px;color:#64748b">Spend Rp ${fmt(prev.spent)} → Rp ${fmt(totalSpent)} · Komisi Rp ${fmt(prev.komisi)} → Rp ${fmt(totalKomisi)}</div>` : ''}</div>`;
-    }
   }
 
   el.innerHTML = `
@@ -1019,10 +1083,25 @@ function renderCampaignTab() {
   }
 
   const tbody = document.getElementById('tbody-campaign');
+  const prevSnap = getPrevSnapshot();
+  const prevCamp = prevSnap && Array.isArray(prevSnap.campaigns)
+    ? Object.fromEntries(prevSnap.campaigns.map(x => [x.name, x])) : {};
   tbody.innerHTML = campaigns.map(c => {
     const roasTxt   = c.roas !== null ? c.roas.toFixed(2) + 'x' : (c.spent > 0 ? '0.00x' : '-');
     const roasClass = c.roas !== null ? colorRoas(c.roas) : '';
     const cpoTxt    = c.cpo !== null ? 'Rp ' + fmt(c.cpo) : '-';
+    // Delta vs snapshot periode sebelumnya
+    const pv = prevCamp[c.name];
+    let dRoas = '<span style="color:var(--text-muted)">-</span>';
+    let dSpend = '<span style="color:var(--text-muted)">-</span>';
+    if (pv && pv.roas !== null && pv.roas !== undefined && c.roas !== null) {
+      const d = c.roas - pv.roas;
+      dRoas = `<span style="color:${d >= 0 ? '#10b981' : '#ef4444'};font-weight:600">${d >= 0 ? '▲ +' : '▼ '}${d.toFixed(2)}</span>`;
+    }
+    if (pv && pv.spent > 0 && c.spent > 0) {
+      const dp = (c.spent - pv.spent) / pv.spent * 100;
+      dSpend = `${dp >= 0 ? '+' : ''}${dp.toFixed(0)}%`;
+    }
     return `<tr>
       <td><strong>${esc(c.name)}</strong>${c.fb && c.fb.delivery === 'inactive' ? ' <span class="badge badge-gray" style="font-size:10px">nonaktif</span>' : ''}</td>
       <td>${c.spent > 0 ? 'Rp ' + fmt(c.spent) : '-'}</td>
@@ -1030,13 +1109,15 @@ function renderCampaignTab() {
       <td>Rp ${fmt(c.komisi)}</td>
       <td class="${c.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${c.profit >= 0 ? 'Rp ' : '-Rp '}${fmt(Math.abs(c.profit))}</td>
       <td class="${roasClass}">${roasTxt}</td>
+      <td>${dRoas}</td>
+      <td>${dSpend}</td>
       <td>${cpoTxt}</td>
       <td>${c.fb ? fmt(c.fb.impressions) : '-'}</td>
       <td>${c.fb ? fmt(c.fb.linkClicks) : '-'}</td>
       <td>${c.fb ? c.fb.ctr.toFixed(2) + '%' : '-'}</td>
       <td>${getStatusBadge(c.roas, c.spent)}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="11" class="no-data">Tidak ada data campaign</td></tr>';
+  }).join('') || '<tr><td colspan="13" class="no-data">Tidak ada data campaign</td></tr>';
 }
 
 function getStatusBadge(roas, spent) {
@@ -1391,43 +1472,61 @@ function computeStatusRows() {
     .sort((a, b) => b.count - a.count);
 }
 
-// --- CLICK INSIGHTS: NEGARA & JAM (butuh Click Report) ----------
+// --- CLICK INSIGHTS: NEGARA & JAM --------------------------------
 function renderClickInsights() {
   const geoWrap  = document.getElementById('chart-geo');
   const hourWrap = document.getElementById('chart-hours');
   if (!geoWrap || !hourWrap) return;
 
-  if (!state.filteredClicks || state.filteredClicks.length === 0) {
+  // Order per jam (unique order, valid saja) — dari file komisi
+  const ordersByHour = Array(24).fill(0);
+  const orderHourMap = {};
+  state.filteredShopee.forEach(r => {
+    if (r.orderHour === null || r.orderHour === undefined) return;
+    if (!orderHourMap[r.orderId]) orderHourMap[r.orderId] = { hour: r.orderHour, valid: false };
+    if (isCountableOrder(r)) orderHourMap[r.orderId].valid = true;
+  });
+  Object.values(orderHourMap).forEach(o => { if (o.valid) ordersByHour[o.hour]++; });
+
+  const hasClicks = state.filteredClicks && state.filteredClicks.length > 0;
+  const hasOrders = ordersByHour.some(v => v > 0);
+
+  if (!hasClicks && !hasOrders) {
     destroyChart('geo');
     destroyChart('hours');
     geoWrap.innerHTML  = '<div class="chart-empty">Upload Shopee Click Report untuk melihat distribusi negara.</div>';
-    hourWrap.innerHTML = '<div class="chart-empty">Upload Shopee Click Report untuk melihat distribusi jam.</div>';
+    hourWrap.innerHTML = '<div class="chart-empty">Upload Click Report atau file komisi untuk melihat distribusi jam.</div>';
     return;
   }
 
-  // Klik per negara (top 10)
-  const byGeo = {};
-  state.filteredClicks.forEach(c => {
-    const key = c.wilayah && c.wilayah !== '-' ? c.wilayah : '(tidak diketahui)';
-    byGeo[key] = (byGeo[key] || 0) + 1;
-  });
-  const geoList = Object.entries(byGeo).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  destroyChart('geo');
-  const geoCanvas = ensureCanvas(geoWrap);
-  state.charts['geo'] = new Chart(geoCanvas, {
-    type: 'bar',
-    data: {
-      labels: geoList.map(([g]) => g.length > 25 ? g.slice(0, 25) + '…' : g),
-      datasets: [{ label: 'Klik', data: geoList.map(([, v]) => v), backgroundColor: '#8b5cf6', borderRadius: 4 }]
-    },
-    options: {
-      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { x: { beginAtZero: true, title: { display: true, text: 'Jumlah Klik' } } }
-    }
-  });
+  // Klik per negara (top 10) — butuh Click Report
+  if (hasClicks) {
+    const byGeo = {};
+    state.filteredClicks.forEach(c => {
+      const key = c.wilayah && c.wilayah !== '-' ? c.wilayah : '(tidak diketahui)';
+      byGeo[key] = (byGeo[key] || 0) + 1;
+    });
+    const geoList = Object.entries(byGeo).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    destroyChart('geo');
+    const geoCanvas = ensureCanvas(geoWrap);
+    state.charts['geo'] = new Chart(geoCanvas, {
+      type: 'bar',
+      data: {
+        labels: geoList.map(([g]) => g.length > 25 ? g.slice(0, 25) + '…' : g),
+        datasets: [{ label: 'Klik', data: geoList.map(([, v]) => v), backgroundColor: '#8b5cf6', borderRadius: 4 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, title: { display: true, text: 'Jumlah Klik' } } }
+      }
+    });
+  } else {
+    destroyChart('geo');
+    geoWrap.innerHTML = '<div class="chart-empty">Upload Shopee Click Report untuk melihat distribusi negara.</div>';
+  }
 
-  // Klik per jam (00-23) — jam tertinggi di-highlight hijau
+  // Klik vs Order per jam (00-23) — bandingin jam klik iklan vs jam order masuk
   const byHour = Array(24).fill(0);
   state.filteredClicks.forEach(c => {
     const h = parseInt((c.waktuKlik || '').slice(11, 13), 10);
@@ -1436,17 +1535,28 @@ function renderClickInsights() {
   const maxHour = Math.max(...byHour);
   destroyChart('hours');
   const hourCanvas = ensureCanvas(hourWrap);
+  const hourDatasets = [
+    { label: 'Klik', data: byHour, backgroundColor: byHour.map(v => maxHour > 0 && v === maxHour ? '#1d4ed8' : '#3b82f6'), borderRadius: 3 }
+  ];
+  if (hasOrders) {
+    hourDatasets.push({ type: 'line', label: 'Order', data: ordersByHour,
+      borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.12)', borderWidth: 2.5,
+      pointRadius: 3, pointHoverRadius: 5, tension: 0.3, fill: true });
+  }
   state.charts['hours'] = new Chart(hourCanvas, {
     type: 'bar',
     data: {
       labels: byHour.map((_, h) => String(h).padStart(2, '0')),
-      datasets: [{ label: 'Klik', data: byHour, backgroundColor: byHour.map(v => maxHour > 0 && v === maxHour ? '#10b981' : '#3b82f6'), borderRadius: 3 }]
+      datasets: hourDatasets
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${fmt(ctx.raw)} klik` } } },
+      plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => {
+        const total = ctx.dataset.data[ctx.dataIndex];
+        return `${ctx.dataset.label}: ${fmt(total)}`;
+      } } } },
       scales: {
-        y: { beginAtZero: true, title: { display: true, text: 'Klik' } },
+        y: { beginAtZero: true, title: { display: true, text: 'Jumlah' } },
         x: { title: { display: true, text: 'Jam (00-23)' } }
       }
     }

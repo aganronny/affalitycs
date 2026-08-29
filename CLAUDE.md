@@ -79,6 +79,12 @@ Fitur v3.0 (penyederhanaan & rules cerdas):
 - **Rekomendasi punya gerbang data**: DATA TIPIS (order <3 & periode <7 hari) cegah keputusan prematur; GANTI PRODUK (order ada tapi komisi 0%) beda dari PAUSE; NONAKTIF buat campaign delivery inactive
 - Scatter CTR vs ROAS dapat **garis referensi break-even 1x** + hint kuadran di judul chart
 
+Fitur v3.2 (alat kerja harian):
+- **Klik vs Order per Jam**: chart jam di tab Perbandingan sekarang overlay order (garis hijau, unique order valid dari `orderHour` di parser) di atas klik (bar biru). Jalan tanpa Click Report sekalipun (order saja). Jawab: "klik ramai jam X, tapi order masuk jam Y"
+- **💾 Backup / 📂 Restore** di filter bar: 1 file JSON isinya riwayat snapshot + sesi upload + mapping — bikin data portable antar perangkat/browser. Restore otomatis buka dashboard kalau backup ada sesi
+- **Kolom Δ ROAS & Δ Spend** di tabel Per Campaign: perbandingan per campaign vs snapshot periode sebelumnya (snapshot sekarang simpan array `campaigns`). Snapshot lama tanpa array → delta tampil '-'
+- `getPrevSnapshot()` = helper tunggal untuk "periode sebelumnya" (dipakai Smart Report & tabel)
+
 Fitur v2.9 (range picker):
 - **Filter tanggal 1 tombol**: klik → dropdown berisi preset sekali-klik (Hari terakhir / 7 hari / 30 hari / Semua data — anchor-nya tanggal data terakhir, bukan hari ini) + kalender mini (mulai Senin). Klik awal → klik akhir → otomatis apply
 - `filter-start`/`filter-end` (input date tersembunyi) tetap SATU SUMBER KEBENARAN semua logika filter — picker cuma lapisan tampilan. Set tanggal programatik WAJIB lewat `setRange()` (bukan set .value langsung) biar label tombol ikut ter-update

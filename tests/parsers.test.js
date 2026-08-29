@@ -76,6 +76,18 @@ t("kolom multi-baris 1 order (komisi cuma di baris pertama)", () => {
   assert.strictEqual(rows.length, 2);
   assert.strictEqual(rows.reduce((s, r) => s + r.komisiBersih, 0), 500);
 });
+t("orderHour diparse dari Waktu Pemesanan (23:35 -> 23)", () => {
+  const csv = 'ID Pemesanan,Status Pesanan,Waktu Pemesanan,Nama Barange,Komisi Bersih Affiliate (Rp),Tag_link1\n' +
+    'ORD9,Tertunda,2026-08-28 23:35:51,Produk Z,100,cp01\n';
+  const rows = P.parseShopeeCSV(csv);
+  assert.strictEqual(rows[0].orderHour, 23);
+});
+t("orderHour null kalau Waktu Pemesanan kosong/rusak", () => {
+  const csv = 'ID Pemesanan,Status Pesanan,Waktu Pemesanan,Nama Barange,Komisi Bersih Affiliate (Rp),Tag_link1\n' +
+    'ORD8,Tertunda,,Produk Y,100,cp01\n';
+  const rows = P.parseShopeeCSV(csv);
+  assert.strictEqual(rows[0].orderHour, null);
+});
 
 // ---------- parseClickReportCSV ----------
 console.log('parseClickReportCSV');

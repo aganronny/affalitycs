@@ -15,7 +15,7 @@
       <div class="logo">
         <span class="logo-icon">📊</span>
         <span class="logo-text">Affalitycs</span>
-        <span class="logo-badge">v3.1</span>
+        <span class="logo-badge">v3.2</span>
       </div>
       <div class="header-meta">
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Ganti tema terang/gelap">🌙</button>
@@ -133,7 +133,10 @@
           <button class="btn-ghost" onclick="openMapping()">⚙️ Mapping</button>
           <button class="btn-ghost" onclick="window.print()">🖨️ PDF</button>
           <button class="btn-ghost" onclick="exportExcel()">📗 Excel</button>
+          <button class="btn-ghost" onclick="backupData()" title="Download semua data (riwayat + sesi + mapping) sebagai file JSON">💾 Backup</button>
+          <button class="btn-ghost" onclick="document.getElementById('restore-file').click()" title="Pulihkan data dari file backup">📂 Restore</button>
           <button class="btn-ghost danger" onclick="resetAll()">↩️ Upload Ulang</button>
+          <input type="file" id="restore-file" accept=".json,application/json" style="display:none" onchange="if (this.files[0]) restoreData(this.files[0]); this.value='';" />
         </div>
       </div>
 
@@ -181,6 +184,8 @@
                   <th onclick="sortTable('tbl-campaign',7)">Impresi ↕</th>
                   <th onclick="sortTable('tbl-campaign',8)">Klik ↕</th>
                   <th onclick="sortTable('tbl-campaign',9)">CTR ↕</th>
+                  <th title="Perubahan ROAS vs periode sebelumnya (dari riwayat analisis)">Δ ROAS</th>
+                  <th title="Perubahan spend vs periode sebelumnya (dari riwayat analisis)">Δ Spend</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -249,8 +254,8 @@
             <div class="chart-wrap tall" id="chart-geo"></div>
           </div>
           <div class="chart-card">
-            <div class="chart-title">🕒 Klik per Jam <span class="chart-hint">(Waktu Klik, 00-23)</span></div>
-            <div class="chart-wrap tall" id="chart-hours"></div>
+            <div class="chart-title">🕒 Klik vs Order per Jam <span class="chart-hint">(Waktu Klik & Waktu Pemesanan, 00-23)</span></div>
+            <div class="chart-wrap" id="chart-hours"></div>
           </div>
         </div>
 
@@ -359,7 +364,7 @@
   <script src="vendor/chart.umd.min.js"></script>
   <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
-  <script src="parsers.js?v=20260829c"></script>
-  <script src="app.js?v=20260829l"></script>
+  <script src="parsers.js?v=20260829d"></script>
+  <script src="app.js?v=20260829m"></script>
 </body>
 </html>

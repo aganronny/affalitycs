@@ -106,12 +106,15 @@ function parseShopeeCSV(text) {
     };
 
     const orderDate = parseDate(get(CI.waktuPesan));
+    const orderHourMatch = get(CI.waktuPesan).match(/^\d{4}-\d{2}-\d{2} (\d{2})/);
+    const orderHour = orderHourMatch ? parseInt(orderHourMatch[1], 10) : null; // 0-23, buat analisis per jam
     const hasShopeeClick = get(CI.waktuKlik) !== '';  // apakah ada waktu klik Shopee
 
     rows.push({
       orderId:          get(CI.orderId),
       status:           get(CI.status),
       date:             orderDate,
+      orderHour,        // jam order (dari Waktu Pemesanan)
       toko:             get(CI.toko),
       barang:           get(CI.barang),
       kategori1:        get(CI.kategori1),
