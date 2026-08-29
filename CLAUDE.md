@@ -18,10 +18,12 @@ Tombol "Coba dengan Sample Data" memuat data demo yang di-generate di dalam `loa
 
 | File | Isi |
 |---|---|
-| `index.html` | UI tunggal: upload, modal mapping, dashboard 6 tab, loading overlay |
-| `app.js` | SEMUA logika (±1690 baris, v2.3): parsing CSV/XLSX, matching tag→campaign, agregasi, render semua chart & tabel, export CSV/PNG |
+| `index.html` | UI tunggal: upload, banner lanjutkan sesi, modal mapping, dashboard 6 tab, loading overlay |
+| `parsers.js` | Lapisan data murni (tanpa DOM): format angka, parsing CSV/XLSX, matching tag→campaign. Bisa dites via Node |
+| `app.js` | SEMUA logika UI (±1425 baris, v2.4): state, upload, filter, render semua chart & tabel, export CSV/PNG, persistensi sesi |
 | `style.css` | Styling lengkap (tema terang, Inter font) |
-| `Stable/` | **Backup identik** dari app.js, index.html, style.css (bukan versi berbeda — diverifikasi byte-identical). Jangan edit di sini, edit file root |
+| `tests/parsers.test.js` | Unit test parser (tanpa framework) — jalan: `node tests\parsers.test.js` |
+| `Stable/` | **Backup versi stabil lama** (v2.2, sebelum split & fitur v2.3+). Jangan edit di sini, edit file root |
 
 Library eksternal via CDN:
 - Chart.js 4.4.0 (semua chart)
@@ -58,4 +60,5 @@ Fitur tambahan v2.3:
 ## Persistensi
 
 - Mapping tag→campaign disimpan di `localStorage` key `affalitycs_mapping`
-- Data upload **tidak** disimpan — refresh = upload ulang
+- **Sesi upload disimpan di IndexedDB** (db `affalitycs`, store `session`, key `current`): data hasil parse + setting filter — muncul banner "Lanjutkan Sesi" saat buka ulang halaman. Reset lewat tombol "Upload Ulang". Gagap di private mode = diam-diam dilewati
+- Run unit test: `node tests\parsers.test.js` (31 kasus, lulus semua = parser aman)

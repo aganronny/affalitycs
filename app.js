@@ -19,23 +19,9 @@ const state = {
 };
 
 // --- HELPERS ---------------------------------------------------
-const fmt = (n) => new Intl.NumberFormat('id-ID').format(Math.round(n));
-const fmtK = (n) => {
-  const sign = n < 0 ? '-' : '';
-  const a = Math.abs(n);
-  if (a >= 1_000_000) return sign + (a/1_000_000).toFixed(1) + 'Jt';
-  if (a >= 1_000) return sign + (a/1_000).toFixed(1) + 'rb';
-  return String(Math.round(a));
-};
-// Escape string sebelum masuk innerHTML — data CSV Shopee/FB bisa berisi <, >, &, "
-const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-const fmtRoas = (r) => r === null || r === undefined || !isFinite(r) ? '-' : r.toFixed(2) + 'x';
-const parseNum = (s) => {
-  if (s === null || s === undefined || s === '' || s === '-') return 0;
-  return parseFloat(String(s).replace(/[^0-9.\-]/g, '')) || 0;
-};
+// fmt, fmtK, fmtRoas, parseNum, parseSpent, esc, normalizeName, splitCSVLine
+// dan semua parser ada di parsers.js (dipakai bareng unit test Node)
 const colorRoas = (r) => r >= 2 ? 'roas-positive' : r >= 1 ? 'roas-neutral' : 'roas-negative';
-const normalizeName = (s) => String(s || '').toLowerCase().replace(/[\s\-_\.-]/g, '');
 
 // Order "valid" = bukan Belum Dibayar / Dibatalkan / Dikembalikan (untuk hitungan pesanan & funnel).
 // Bisa dimatikan lewat toggle "Order valid saja" di filter bar.
@@ -119,290 +105,6 @@ function updateUploadStatus(statusId, files, ext, cardId) {
 
 function updateAnalyzeBtn() {
   document.getElementById('btn-analyze').disabled = (shopeeFiles.length === 0 && fbFiles.length === 0);
-}
-
-// --- PARSE SHOPEE CSV --------------------------------------------
-function parseShopeeCSV(text) {
-  const lines = text.split('\n').filter(l => l.trim());
-  if (lines.length < 2) return [];
-
-  const header = lines[0];
-  const delim = (header.match(/;/g) || []).length > (header.match(/,/g) || []).length ? ';' : ',';
-  const headers = header.split(delim).map(h => h.trim().replace(/\r/g, ''));
-
-  const col = (name) => headers.findIndex(h => h.toLowerCase().includes(name.toLowerCase()));
-  const CI = {
-    orderId:        col('ID Pemesanan'),
-    status:         col('Status Pesanan'),
-    waktuPesan:     col('Waktu Pemesanan'),
-    waktuKlik:      col('Waktu Klik'),          // Shopee-tracked click time
-    toko:           col('Nama Toko'),
-    barang:         col('Nama Barang') !== -1 ? col('Nama Barang') : col('Nama Barange'),
-    kategori1:      col('L1 Kategori'),
-    kategori2:      col('L2 Kategori'),
-    harga:          col('Harga(Rp)'),
-    jumlah:         col('Jumlah'),
-    nilaiPembelian: col('Nilai Pembelian'),
-    komisiShopee:   col('Komisi Shopee per Pesanan'),
-    komisiXtra:     col('Komisi XTRA per Pesanan'),
-    totalKomisi:    col('Total Komisi per Pesanan'),
-    komisiBersih:   col('Komisi Bersih Affiliate'),
-    statusProduk:   col('Status Produk Affiliate'),
-    tipeOrder:      col('Tipe Pesanan'),
-    tag1:           col('Tag_link1'),
-    tag2:           col('Tag_link2'),
-    tag3:           col('Tag_link3'),
-    platform:       col('Platform'),
-  };
-
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = splitCSVLine(lines[i], delim);
-    if (cells.length < 5) continue;
-
-    const get = (idx) => idx >= 0 && idx < cells.length ? cells[idx].trim().replace(/\r/g, '') : '';
-
-    // Parse tanggal: coba berbagai format
-    const parseDate = (raw) => {
-      if (!raw) return '';
-      // DD/MM/YYYY atau DD/MM/YYYY HH:MM
-      let m = raw.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-      // YYYY-MM-DD (sudah benar)
-      m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-      // YYYY/MM/DD
-      m = raw.match(/(\d{4})\/(\d{2})\/(\d{2})/);
-      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-      return '';
-    };
-
-    const orderDate = parseDate(get(CI.waktuPesan));
-    const hasShopeeClick = get(CI.waktuKlik) !== '';  // apakah ada waktu klik Shopee
-
-    rows.push({
-      orderId:          get(CI.orderId),
-      status:           get(CI.status),
-      date:             orderDate,
-      toko:             get(CI.toko),
-      barang:           get(CI.barang),
-      kategori1:        get(CI.kategori1),
-      kategori2:        get(CI.kategori2),
-      harga:            parseNum(get(CI.harga)),
-      jumlah:           parseNum(get(CI.jumlah)) || 1,
-      nilaiPembelian:   parseNum(get(CI.nilaiPembelian)),
-      totalKomisi:      parseNum(get(CI.totalKomisi)),
-      komisiBersih:     parseNum(get(CI.komisiBersih)),
-      tag1:             get(CI.tag1),
-      tag2:             get(CI.tag2),
-      tag3:             get(CI.tag3),
-      platform:         get(CI.platform),
-      hasShopeeClick,   // true = klik tercatat di Shopee
-    });
-  }
-  return rows;
-}
-
-function splitCSVLine(line, delim) {
-  const result = [];
-  let cur = '';
-  let inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') { inQuote = !inQuote; }
-    else if (ch === delim && !inQuote) { result.push(cur); cur = ''; }
-    else { cur += ch; }
-  }
-  result.push(cur);
-  return result;
-}
-
-// --- PARSE SHOPEE WEBSITE CLICK REPORT --------------------------
-function parseClickReportCSV(text) {
-  const lines = text.split('\n').filter(l => l.trim());
-  if (lines.length < 2) return [];
-  // Header: Klik ID,Waktu Klik,Wilayah Klik,Tag_link,Perujuk
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = lines[i].split(',');
-    if (cells.length < 5) continue;
-    const clickId = (cells[0] || '').trim().replace(/^\uFEFF/, '');
-    const waktuKlik = (cells[1] || '').trim();
-    const wilayah = (cells[2] || '').trim();
-    const tagLink = (cells[3] || '').trim();
-    const perujuk = (cells[4] || '').trim().replace(/\r/g, '');
-
-    // Extract date from waktu klik (format: YYYY-MM-DD HH:MM:SS)
-    const dateMatch = waktuKlik.match(/^(\d{4}-\d{2}-\d{2})/);
-    const date = dateMatch ? dateMatch[1] : '';
-
-    // Parse tag_link segments: e.g. "MINIFOGGINGMACHINE-meta-cp03--"
-    // Extract tag1 (first segment before first dash that matches a word)
-    const tagParts = tagLink.split('-').filter(Boolean);
-    const tag1 = tagParts[0] || '';
-
-    rows.push({ clickId, date, waktuKlik, wilayah, tagLink, tag1, perujuk });
-  }
-  console.log('[ClickReport] Parsed', rows.length, 'clicks');
-  return rows;
-}
-
-// Map click report Tag_link to campaign key (same as resolveShopeeKey)
-function resolveClickKey(tagLink, fbNameSet, mapping) {
-  if (!tagLink) return '(tidak ada tag)';
-  // Try direct match with mapping
-  if (mapping[tagLink]) return mapping[tagLink];
-  if (fbNameSet.has(tagLink)) return tagLink;
-
-  // The click report Tag_link format is: TAG1-meta-TAG3-- (or TAG1-TAG1-TAG1--)
-  // Commission report Tag_link1 = TAG1, Tag_link3 = TAG3
-  // So we extract tag1 from click report and match
-  const parts = tagLink.split('-').filter(Boolean);
-  const tag1 = parts[0] || '';
-  if (tag1 && mapping[tag1]) return mapping[tag1];
-  if (tag1 && fbNameSet.has(tag1)) return tag1;
-
-  // Normalized match
-  const normTag = normalizeName(tagLink);
-  const normTag1 = normalizeName(tag1);
-  for (const name of fbNameSet) {
-    const normName = normalizeName(name);
-    if (normName === normTag || normName === normTag1) return name;
-    if (normName.includes(normTag1) || normTag1.includes(normName)) return name;
-  }
-
-  // Check existing shopee tag mapping keys
-  for (const [mKey, mVal] of Object.entries(mapping)) {
-    if (normalizeName(mKey) === normTag1 || tag1 === mKey) return mVal;
-  }
-
-  return tag1 || tagLink; // fallback to tag1 or full tag
-}
-
-// --- PARSE FB ADS XLSX ------------------------------------------
-function parseFbXLSX(arrayBuffer) {
-  const data = new Uint8Array(arrayBuffer);
-  const wb = XLSX.read(data, { type: 'array' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
-  console.log('[FB XLSX] rows:', raw.length);
-  return extractFbRows(raw);
-}
-
-// --- PARSE FB ADS CSV -------------------------------------------
-function parseFbCSV(text) {
-  const lines = text.split('\n').filter(l => l.trim());
-  if (lines.length < 2) return [];
-
-  const header = lines[0];
-  const delim = (header.match(/;/g) || []).length > (header.match(/,/g) || []).length ? ';' : ',';
-  const headers = splitCSVLine(header, delim).map(h => h.trim().replace(/\r/g, '').replace(/^"|"$/g, ''));
-
-  const raw = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cells = splitCSVLine(lines[i], delim);
-    if (cells.length < 2) continue;
-    const row = {};
-    headers.forEach((h, idx) => {
-      row[h] = (cells[idx] || '').trim().replace(/^"|"$/g, '').replace(/\r/g, '');
-    });
-    raw.push(row);
-  }
-  console.log('[FB CSV] rows:', raw.length);
-  return extractFbRows(raw);
-}
-
-// FB "Amount spent (IDR)" selalu angka bulat — kalau export memakai format id-ID,
-// '18.415' berarti delapan belas ribu (ribuan), bukan delapan belas koma empat.
-// parseNum tidak bisa membedakan (rawan korup nilai Shopee 3 desimal seperti '962.745'),
-// jadi guard ini khusus kolom spend FB saja.
-function parseSpent(raw) {
-  const s = String(raw || '').trim().replace(/[^0-9.\-]/g, '');
-  return parseNum(/^-?\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : s);
-}
-
-// --- SHARED FB ROW EXTRACTOR ------------------------------------
-function extractFbRows(raw) {
-  const campaigns = [];
-  for (const row of raw) {
-    const keys = Object.keys(row);
-    const get = (patterns) => {
-      for (const p of patterns) {
-        const k = keys.find(k => k.toLowerCase().includes(p.toLowerCase()));
-        if (k !== undefined) return row[k];
-      }
-      return '';
-    };
-
-    const campaignName = String(get(['Campaign name', 'campaign name', 'nama campaign', 'nama kampanye']) || '').trim();
-    if (!campaignName || campaignName === 'Campaign name' || /^\d{4}-\d{2}-\d{2}$/.test(campaignName)) continue;
-
-    const parseDateAny = (raw) => {
-      if (!raw) return '';
-      raw = String(raw).trim();
-      let m = raw.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-      m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-      m = raw.match(/(\d{4})\/(\d{2})\/(\d{2})/);
-      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-      return '';
-    };
-    const dateStr = get(['Day', 'Reporting starts', 'Hari', 'Tanggal mulai pelaporan', 'Date', 'Tanggal']);
-    const date = parseDateAny(dateStr);
-
-    campaigns.push({
-      date,
-      campaignName,
-      spent:            parseSpent(get(['Amount spent', 'amount spent', 'Jumlah yang dibelanjakan'])),
-      reach:            parseNum(get(['Reach', 'Jangkauan'])),
-      impressions:      parseNum(get(['Impressions', 'Tayangan'])),
-      linkClicks:       parseNum(get(['Link clicks', 'Klik tautan'])),
-      allClicks:        parseNum(get(['Clicks (all)', 'Semua klik'])),
-      cpc:              parseNum(get(['CPC (cost per link click)', 'CPC (all)', 'BPK'])),
-      cpm:              parseNum(get(['CPM', 'BPT'])),
-      ctr:              parseNum(get(['CTR (link click', 'CTR (all)', 'RKT'])),
-      landingPageViews: parseNum(get(['Landing page views', 'Tampilan halaman landing'])),
-      budget:           parseNum(get(['Ad set budget', 'Budget', 'Anggaran'])),
-      delivery:         String(get(['Campaign delivery', 'Pengiriman kampanye']) || '').trim(),
-    });
-  }
-  console.log('[FB] Campaigns:', campaigns.map(c => c.campaignName));
-  return campaigns;
-}
-
-// --- RESOLVE SHOPEE KEY -----------------------------------------
-function resolveShopeeKey(row, fbNameSet, mapping) {
-  const tag1 = (row.tag1 || '').trim();
-  const tag3 = (row.tag3 || '').trim();
-
-  if (tag3 && mapping[tag3]) return { key: mapping[tag3], source: 'manual' };
-  if (tag1 && mapping[tag1]) return { key: mapping[tag1], source: 'manual' };
-  if (tag3 && fbNameSet.has(tag3)) return { key: tag3, source: 'tag3' };
-  if (tag1 && fbNameSet.has(tag1)) return { key: tag1, source: 'tag1' };
-
-  if (tag3) {
-    const normTag3 = normalizeName(tag3);
-    const match = [...fbNameSet].find(n => normalizeName(n) === normTag3);
-    if (match) return { key: match, source: 'tag3_norm' };
-  }
-  if (tag1) {
-    const normTag1 = normalizeName(tag1);
-    const match = [...fbNameSet].find(n => normalizeName(n) === normTag1);
-    if (match) return { key: match, source: 'tag1_norm' };
-  }
-  if (tag1) {
-    const normTag1 = normalizeName(tag1);
-    const match = [...fbNameSet].find(n => {
-      const normN = normalizeName(n);
-      return normN.includes(normTag1) || normTag1.includes(normN);
-    });
-    if (match) return { key: match, source: 'tag1_partial' };
-  }
-
-  if (tag3) return { key: tag3, source: 'tag3_raw' };
-  if (tag1) return { key: tag1, source: 'tag1_raw' };
-  return { key: '(tidak ada tag)', source: 'none' };
 }
 
 // --- MAIN ANALYSIS ----------------------------------------------
@@ -567,16 +269,104 @@ function saveMapping(m) {
   try { localStorage.setItem('affalitycs_mapping', JSON.stringify(m)); } catch {}
 }
 
+// --- PERSISTENSI SESI (IndexedDB) --------------------------------
+// Data upload disimpan lokal di browser biar refresh gak perlu upload ulang.
+// Murni storage browser ini — gak ada data yang dikirim ke mana pun.
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('affalitycs', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('session');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveSession() {
+  try {
+    const db = await idbOpen();
+    const data = {
+      savedAt: Date.now(),
+      shopeeRows: state.shopeeRows,
+      fbCampaigns: state.fbCampaigns,
+      clickReport: state.clickReport,
+      mapping: state.mapping,
+      filterStart: document.getElementById('filter-start').value,
+      filterEnd: document.getElementById('filter-end').value,
+      ppn: document.getElementById('ppn-toggle').checked,
+      validOrders: document.getElementById('valid-orders-toggle')?.checked !== false,
+    };
+    db.transaction('session', 'readwrite').objectStore('session').put(data, 'current');
+  } catch (e) { /* storage gak tersedia (mis. private mode) — abaikan */ }
+}
+
+async function loadSession() {
+  try {
+    const db = await idbOpen();
+    return await new Promise((resolve, reject) => {
+      const rq = db.transaction('session', 'readonly').objectStore('session').get('current');
+      rq.onsuccess = () => resolve(rq.result || null);
+      rq.onerror = () => reject(rq.error);
+    });
+  } catch (e) { return null; }
+}
+
+async function clearSession() {
+  try {
+    const db = await idbOpen();
+    db.transaction('session', 'readwrite').objectStore('session').delete('current');
+  } catch (e) {}
+}
+
+async function checkResume() {
+  try {
+    const s = await loadSession();
+    if (!s || !s.shopeeRows || !s.shopeeRows.length) return;
+    const dates = s.shopeeRows.map(r => r.date).filter(Boolean).sort();
+    const range = dates.length ? `${dates[0]} s/d ${dates[dates.length - 1]}` : 'tanpa data Shopee';
+    document.getElementById('resume-text').innerHTML =
+      `Sesi sebelumnya ditemukan (disimpan ${new Date(s.savedAt).toLocaleString('id-ID')}):` +
+      `<br><strong>${fmt(s.shopeeRows.length)}</strong> baris komisi Shopee · <strong>${s.fbCampaigns.length}</strong> baris FB Ads · <strong>${s.clickReport.length}</strong> klik · ${range}` +
+      `<br><span style="font-size:12px;color:#94a3b8">Tersimpan lokal di browser ini — gak ada yang dikirim ke internet.</span>`;
+    document.getElementById('resume-banner').style.display = 'flex';
+  } catch (e) {}
+}
+
+async function restoreSession() {
+  const s = await loadSession();
+  if (!s) return;
+  showLoading('Memulihkan sesi terakhir...');
+  state.shopeeRows = s.shopeeRows || [];
+  state.fbCampaigns = s.fbCampaigns || [];
+  state.clickReport = s.clickReport || [];
+  state.mapping = s.mapping || {};
+  document.getElementById('filter-start').value = s.filterStart || '';
+  document.getElementById('filter-end').value = s.filterEnd || '';
+  document.getElementById('ppn-toggle').checked = !!s.ppn;
+  const vo = document.getElementById('valid-orders-toggle');
+  if (vo) vo.checked = s.validOrders !== false;
+  dismissResume();
+  hideLoading();
+  buildDashboard({ keepFilters: true });
+}
+
+function dismissResume() {
+  document.getElementById('resume-banner').style.display = 'none';
+}
+
+checkResume();
+
 // --- BUILD DASHBOARD --------------------------------------------
-function buildDashboard() {
+function buildDashboard(opts = {}) {
   showLoading('Membangun dashboard...');
 
-  const dates = state.shopeeRows.map(r => r.date).filter(Boolean).sort();
-  if (dates.length > 0) {
-    document.getElementById('filter-start').value = dates[0];
-    document.getElementById('filter-end').value = dates[dates.length - 1];
-    document.getElementById('last-updated').textContent =
-      `Data: ${dates[0]} - ${dates[dates.length - 1]}`;
+  if (!opts.keepFilters) {
+    const dates = state.shopeeRows.map(r => r.date).filter(Boolean).sort();
+    if (dates.length > 0) {
+      document.getElementById('filter-start').value = dates[0];
+      document.getElementById('filter-end').value = dates[dates.length - 1];
+      document.getElementById('last-updated').textContent =
+        `Data: ${dates[0]} - ${dates[dates.length - 1]}`;
+    }
   }
 
   setTimeout(() => {
@@ -660,6 +450,7 @@ function applyFilters() {
   });
   console.log('[Filter] dateRatio:', state.dateRatio.toFixed(3), 'fbHasDates:', fbHasDates, 'clicks:', state.filteredClicks.length);
   renderAll();
+  saveSession();
 }
 
 function renderAll() {
@@ -1765,6 +1556,7 @@ function resetFilters() {
 
 function resetAll() {
   if (!confirm('Reset semua data dan kembali ke halaman upload?')) return;
+  clearSession();
   shopeeFiles = []; fbFiles = []; clickFiles = [];
   state.shopeeRows = []; state.fbCampaigns = []; state.clickReport = [];
   state.filteredShopee = []; state.filteredFb = []; state.filteredClicks = [];

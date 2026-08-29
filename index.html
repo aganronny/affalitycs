@@ -32,6 +32,16 @@
         <p class="upload-subtitle">Upload laporan harian atau akumulasi, langsung tahu campaign mana yang untung dan mana yang harus dimatikan.</p>
       </div>
 
+      <!-- BANNER LANJUTKAN SESI -->
+      <div id="resume-banner" class="resume-banner" style="display:none">
+        <div class="resume-icon">💾</div>
+        <div class="resume-text" id="resume-text"></div>
+        <div class="resume-actions">
+          <button class="btn-analyze" style="padding:9px 18px;font-size:14px" onclick="restoreSession()">Lanjutkan Sesi →</button>
+          <button class="btn-demo" onclick="dismissResume()">Mulai Baru</button>
+        </div>
+      </div>
+
       <div class="upload-grid">
         <!-- Shopee Affiliate CSV -->
         <div class="upload-card" id="drop-shopee">
@@ -385,6 +395,7 @@
   <!-- SCRIPTS -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="app.js?v=20260829b"></script>
+  <script src="parsers.js?v=20260829"></script>
+  <script src="app.js?v=20260829c"></script>
 </body>
 </html>
