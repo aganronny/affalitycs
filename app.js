@@ -231,6 +231,11 @@ function renderRangePanel() {
     <div class="rp-grid">${cells}</div>
     <div class="rp-foot">Klik tanggal awal, lalu tanggal akhir</div>`;
 }
+// Klik di dalam panel gak boleh dianggap "klik luar" — listener dipasang di panel
+// (bukan document) karena innerHTML panel diganti tiap klik, yang bikin target klik
+// jadi detached node sehingga closest('.range-wrap') gagal di document listener.
+const _rpPanelEl = document.getElementById('range-panel');
+if (_rpPanelEl) _rpPanelEl.addEventListener('click', (ev) => ev.stopPropagation());
 document.addEventListener('click', (ev) => {
   const panel = document.getElementById('range-panel');
   if (!panel || panel.style.display !== 'block') return;
