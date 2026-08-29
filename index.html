@@ -15,7 +15,7 @@
       <div class="logo">
         <span class="logo-icon">📊</span>
         <span class="logo-text">Affalitycs</span>
-        <span class="logo-badge">v3.0</span>
+        <span class="logo-badge">v3.1</span>
       </div>
       <div class="header-meta">
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Ganti tema terang/gelap">🌙</button>
@@ -152,7 +152,6 @@
         <button class="tab-btn" data-tab="product" onclick="switchTab('product', this)">📦 Per Produk</button>
         <button class="tab-btn" data-tab="comparison" onclick="switchTab('comparison', this)">⚖️ Perbandingan</button>
         <button class="tab-btn" data-tab="trend" onclick="switchTab('trend', this)">📅 Tren Harian</button>
-        <button class="tab-btn" data-tab="decision" onclick="switchTab('decision', this)">🎯 Rekomendasi</button>
       </div>
 
       <!-- TAB: CAMPAIGN -->
@@ -224,15 +223,7 @@
 
       <!-- TAB: COMPARISON -->
       <div id="tab-comparison" class="tab-content">
-        <!-- Scatter Plot CTR vs ROAS -->
-        <div class="chart-row">
-          <div class="chart-card wide">
-            <div class="chart-title">Scatter Plot: CTR vs ROAS <span class="chart-hint">(di atas garis putus = profit · kiri bawah = kreatif lemah · kanan bawah = produk/harga bermasalah)</span></div>
-            <div class="chart-wrap" id="chart-scatter"></div>
-          </div>
-        </div>
-
-        <!-- Click Loss Analysis -->
+        <!-- Funnel Klik: FB Ads → Masuk Shopee → Order -->
         <div class="chart-row">
           <div class="chart-card wide">
             <div class="chart-title">🔍 Funnel Klik: FB Ads → Masuk Shopee → Order
@@ -240,6 +231,14 @@
             </div>
             <div id="click-loss-summary" class="click-loss-summary" style="display:none"></div>
             <div class="chart-wrap" id="chart-click-loss"></div>
+          </div>
+        </div>
+
+        <!-- Scatter Plot CTR vs ROAS -->
+        <div class="chart-row">
+          <div class="chart-card wide">
+            <div class="chart-title">Scatter Plot: CTR vs ROAS <span class="chart-hint">(di atas garis putus = profit · kiri bawah = kreatif lemah · kanan bawah = produk/harga bermasalah)</span></div>
+            <div class="chart-wrap" id="chart-scatter"></div>
           </div>
         </div>
 
@@ -345,11 +344,6 @@
         </div>
       </div>
 
-      <!-- TAB: REKOMENDASI -->
-      <div id="tab-decision" class="tab-content">
-        <div id="decision-cards" class="decision-cards"></div>
-      </div>
-
     </div>
   </section>
 
@@ -366,6 +360,6 @@
   <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="parsers.js?v=20260829c"></script>
-  <script src="app.js?v=20260829j"></script>
+  <script src="app.js?v=20260829k"></script>
 </body>
 </html>

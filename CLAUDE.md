@@ -10,7 +10,7 @@ Dashboard analisis **Shopee Affiliate × Facebook Ads** untuk menghitung ROAS, p
    - **Facebook Ads Report** (XLSX/XLS/CSV dari Meta Ads Manager, bisa banyak file)
    - **Shopee Website Click Report** (CSV klik, opsional — untuk funnel akurat)
 3. Klik "Mulai Analisis" → kalau ada tag Shopee yang gak match nama campaign FB, muncul modal mapping
-4. Dashboard tampil dengan 5 tab: Per Campaign, Per Produk, Perbandingan (funnel + scatter), Tren Harian, Rekomendasi
+4. Dashboard tampil dengan 4 tab: Per Campaign, Per Produk, Perbandingan (funnel dulu, baru scatter), Tren Harian
 
 Tombol "Coba dengan Sample Data" memuat data demo yang di-generate di dalam `loadDemoData()` (app.js).
 
@@ -18,7 +18,7 @@ Tombol "Coba dengan Sample Data" memuat data demo yang di-generate di dalam `loa
 
 | File | Isi |
 |---|---|
-| `index.html` | UI tunggal: upload, banner lanjutkan sesi, modal mapping, dashboard 5 tab, loading overlay |
+| `index.html` | UI tunggal: upload, banner lanjutkan sesi, modal mapping, dashboard 4 tab, loading overlay |
 | `parsers.js` | Lapisan data murni (tanpa DOM): format angka, parsing CSV/XLSX, matching tag→campaign, breakdown FB Ads. Bisa dites via Node |
 | `app.js` | SEMUA logika UI (±1560 baris, v2.5): state, upload, filter, render semua chart & tabel, export CSV/PNG, persistensi sesi |
 | `style.css` | Styling lengkap (tema terang, Inter font) |
@@ -52,7 +52,7 @@ Metrik inti:
 - Click report di-dedup by `clickId` saat upload multi-file (aman dari periode overlap)
 - `parseSpent` khusus kolom FB spend: '18.415' = delapan belas ribu (guard format id-ID). `parseNum` global sengaja TIDAK diubah — nilai Shopee 3 desimal ('962.745') harus tetap kebaca desimal
 
-Aturan rekomendasi (tab Rekomendasi) — urutan evaluasi: (1) tanpa FB & tanpa spend = NO DATA, (2) FB ada tapi spend 0 = NONAKTIF, (3) order ≥1 tapi komisi 0 = GANTI PRODUK, (4) order 0 = PAUSE, (5) order <3 & periode <7 hari = DATA TIPIS (jangan ambil keputusan dulu), (6) ladder ROAS: ≥3 SCALE UP, ≥2 SCALE, ≥1.2 MAINTAIN, ≥0.8 MONITOR, <0.8 PAUSE. Ekstra: komisi/order < Rp 300 = hint butuh volume besar.
+Tab **Rekomendasi DIHAPUS di v3.1** (keputusan user): upload sering cuma per hari, terlalu tipis buat ladder ROAS. Sumber keputusan sekarang = kartu **"Kandidat pause" + BEP di Smart Report** (kandidat pause hanya muncul kalau ada spend & ROAS < 1 — sudah imply data cukup). Rules ladder ROAS (≥3/≥2/≥1.2/≥0.8) kalaupun dipakai lagi, urutan evaluasinya: NO DATA → NONAKTIF → GANTI PRODUK (order ≥1, komisi 0) → PAUSE (order 0) → DATA TIPIS (order <3 & periode <7 hari) → ladder; komisi/order < Rp 300 = hint volume besar.
 
 Fitur tambahan v2.3:
 - Tab Perbandingan punya chart **Klik per Negara** (top 10, dari Wilayah Klik) & **Klik per Jam** (00-23) — keduanya butuh Click Report

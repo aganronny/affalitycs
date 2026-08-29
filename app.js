@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v3.0 - Agustus 2026
+   v3.1 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -20,7 +20,6 @@ const state = {
   dateRatio: 1,
   history: [],           // snapshot riwayat analisis (dari IndexedDB)
   shopeeDupCount: 0,     // baris komisi identik yang dibuang saat upload
-  _decisionCampaigns: [], // cache render terakhir tab Rekomendasi (untuk checklist)
 };
 
 // --- HELPERS ---------------------------------------------------
@@ -741,7 +740,6 @@ function renderAll() {
   try { renderProductTab(); } catch(e) { console.warn('renderProductTab:', e); }
   try { renderComparisonTab(); } catch(e) { console.warn('renderComparisonTab:', e); }
   try { renderTrendTab(); } catch(e) { console.warn('renderTrendTab:', e); }
-  try { renderDecisionTab(); } catch(e) { console.warn('renderDecisionTab:', e); }
   try { renderClickInsights(); } catch(e) { console.warn('renderClickInsights:', e); }
   try { renderFbBreakdown(); } catch(e) { console.warn('renderFbBreakdown:', e); }
   try { renderSanity(); } catch(e) { console.warn('renderSanity:', e); }
@@ -1186,7 +1184,7 @@ function renderComparisonTab() {
           responsive: true, maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: { position: 'top' },
+            legend: { position: 'bottom' },
             datalabels: { display: true, anchor: 'end', align: 'end', color: dlColor(),
               font: { size: 9, weight: 600 }, formatter: (v) => v ? fmt(v) : '' },
             tooltip: { callbacks: { label: (ctx) => {
@@ -1620,138 +1618,6 @@ function renderFbBreakdown() {
     data: { labels: regData.map(([k]) => k.length > 30 ? k.slice(0, 30) + '…' : k), datasets: [{ label: 'Klik', data: regData.map(([, v]) => v.clicks), backgroundColor: '#f97316', borderRadius: 4 }] },
     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = regData[ctx.dataIndex][1]; return [`${fmt(d.clicks)} klik`, `Spend Rp${fmtK(d.spent)}`]; } } } }, scales: { x: { beginAtZero: true } } }
   });
-}
-
-// Checklist aksi (persist di localStorage) — auto-bersih kalau rekomendasi campaign berubah
-function loadActionChecks() {
-  try { return JSON.parse(localStorage.getItem('affalitycs_action_checks') || '{}'); } catch { return {}; }
-}
-function saveActionChecks(m) {
-  try { localStorage.setItem('affalitycs_action_checks', JSON.stringify(m)); } catch {}
-}
-function toggleActionCheck(idx, checked) {
-  const c = (state._decisionCampaigns || [])[idx];
-  if (!c) return;
-  const checks = loadActionChecks();
-  if (checked) checks[c.name] = { action: c._action, checkedAt: Date.now() };
-  else delete checks[c.name];
-  saveActionChecks(checks);
-}
-
-// --- DECISION TAB -----------------------------------------------
-function renderDecisionTab() {
-  const campaigns = buildCampaignData().filter(c => c.spent > 0 || c.orders > 0);
-
-  // tandai aksi tiap campaign & bersihkan checklist yang basi
-  campaigns.forEach(c => { c._action = null; });
-  const checks = loadActionChecks();
-  let checksDirty = false;
-  Object.keys(checks).forEach(name => {
-    const c = campaigns.find(x => x.name === name);
-    if (!c) { delete checks[name]; checksDirty = true; }  // campaign gak ada lagi di data
-  });
-  if (checksDirty) saveActionChecks(checks);
-  state._decisionCampaigns = [];
-
-  document.getElementById('decision-cards').innerHTML = campaigns.map(c => {
-    let action, actionClass, icon, reason;
-    const days = daysInPeriod();
-
-    if (!c.fb && c.spent === 0) {
-      action = 'NO DATA'; actionClass = 'action-nodata'; icon = '❔';
-      reason = 'Tidak ada data spend iklan. Kemungkinan traffic organik atau mapping belum sesuai.';
-    } else if (c.fb && c.spent === 0) {
-      action = 'NONAKTIF'; actionClass = 'action-nodata'; icon = '💤';
-      reason = c.fb.delivery === 'inactive'
-        ? 'Iklan mati/nonaktif di periode ini — sengaja di-pause atau kena reject? Cek Ads Manager.'
-        : 'Campaign terdaftar tapi tidak ada spend di periode ini — belum mulai tayang atau kena reject.';
-    } else if (c.orders >= 1 && c.komisi === 0) {
-      action = 'GANTI PRODUK'; actionClass = 'action-monitor'; icon = '🔄';
-      reason = `Iklan berhasil — ada ${c.orders} order, tapi produknya komisi 0%/tidak ada. Kampanyenya jalan, pilih produk lain dengan komisi layak.`;
-    } else if (c.orders === 0) {
-      action = 'PAUSE'; actionClass = 'action-pause'; icon = '⛔';
-      reason = 'Ada spend tapi belum ada order. Cek apakah link/produk masih hidup, lalu evaluasi targeting.';
-    } else if (c.orders < 3 && days < 7) {
-      action = 'DATA TIPIS'; actionClass = 'action-nodata'; icon = '⏳';
-      reason = `Baru ${c.orders} order dalam ${days} hari — ROAS ${c.roas.toFixed(2)}x masih rawan bias dari 1-2 order. Kumpulkan minimal 3 order / 7 hari sebelum ambil keputusan.`;
-    } else if (c.roas >= 3) {
-      action = 'SCALE UP'; actionClass = 'action-scale'; icon = '🚀';
-      reason = `ROAS ${c.roas.toFixed(2)}x sangat baik. Pertimbangkan menambah budget 20-50% secara bertahap.`;
-    } else if (c.roas >= 2) {
-      action = 'SCALE'; actionClass = 'action-scale'; icon = '📈';
-      reason = `ROAS ${c.roas.toFixed(2)}x profitable. Bisa ditingkatkan budget perlahan sambil monitoring.`;
-    } else if (c.roas >= 1.2) {
-      action = 'MAINTAIN'; actionClass = 'action-maintain'; icon = '✅';
-      reason = `ROAS ${c.roas.toFixed(2)}x untung tipis. Pertahankan dan coba optimasi kreatif iklan.`;
-    } else if (c.roas >= 0.8) {
-      action = 'MONITOR'; actionClass = 'action-monitor'; icon = '👀';
-      reason = `ROAS ${c.roas.toFixed(2)}x mendekati rugi. Monitor ketat, coba A/B test creative.`;
-    } else {
-      action = 'PAUSE'; actionClass = 'action-pause'; icon = '⛔';
-      reason = `ROAS ${c.roas.toFixed(2)}x - rugi. Pause dan evaluasi ulang produk, targeting, atau kreatif.`;
-    }
-
-    // komisi/order tipis = butuh volume besar demi profit
-    if (['SCALE UP', 'SCALE', 'MAINTAIN', 'MONITOR'].includes(action) && c.komisiPerOrder !== null && c.komisiPerOrder < 300) {
-      reason += ` Komisi/order sangat tipis (Rp ${fmt(c.komisiPerOrder)}) — butuh volume besar untuk profit.`;
-    }
-
-    const cpoTxt   = c.cpo   ? 'Rp ' + fmt(c.cpo)       : '-';
-    const roasTxt  = c.roas  !== null ? c.roas.toFixed(2) + 'x' : '-';
-    const ctrTxt   = c.fb    ? c.fb.ctr.toFixed(2) + '%' : '-';
-    const cpcTxt   = c.fb    ? 'Rp ' + fmt(c.fb.cpc)     : '-';
-    const impTxt   = c.fb    ? fmtK(c.fb.impressions)     : '-';
-    const clickTxt = c.fb    ? fmtK(c.fb.linkClicks)      : '-';
-
-    let fbHint = '';
-    if (c.fb) {
-      if (c.fb.ctr < 1)  fbHint = ` CTR rendah (${ctrTxt}) - kreatif iklan perlu diperbaiki.`;
-      else if (c.fb.ctr > 5) fbHint = ` CTR tinggi (${ctrTxt}) - audiens tertarik, masalah mungkin di produk/harga.`;
-      if (c.fb.cpc > 5000) fbHint += ` CPC mahal (Rp${fmt(c.fb.cpc)}) - narrow audience atau kompetisi tinggi.`;
-    }
-
-    // BEP konkret: berapa order/hari yang dibutuhkan vs realita
-    let bepLine = '';
-    if (c.spent > 0 && c.komisiPerOrder > 0) {
-      const days = daysInPeriod();
-      const needed = Math.ceil((c.spent / days) / c.komisiPerOrder);
-      const actual = (c.orders / days).toFixed(1);
-      bepLine = `Butuh <strong>${needed} order/hari</strong> demi balik modal (realita ${actual}/hari, komisi/order Rp ${fmt(c.komisiPerOrder)}). `;
-    }
-
-    // checklist: kalau aksi berubah dari yang dicentang, anggap basi & hapus
-    c._action = action;
-    const stored = checks[c.name];
-    const checked = !!stored && stored.action === action;
-    if (stored && stored.action !== action) { delete checks[c.name]; checksDirty = true; }
-    const idx = state._decisionCampaigns.push(c) - 1;
-
-    return `
-    <div class="decision-card">
-      <div class="decision-card-header">
-        <label class="action-check" title="Centang kalau aksi ini sudah lo eksekusi di Ads Manager">
-          <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleActionCheck(${idx}, this.checked)" />
-        </label>
-        <span class="decision-action-icon">${icon}</span>
-        <span class="decision-campaign-name">${esc(c.name)}</span>
-        <span class="decision-action-badge ${actionClass}">${action}</span>
-      </div>
-      <div class="decision-metrics">
-        <div class="dm-item"><div class="dm-label">ROAS</div><div class="dm-value ${colorRoas(c.roas)}">${roasTxt}</div></div>
-        <div class="dm-item"><div class="dm-label">Spend</div><div class="dm-value">Rp${fmtK(c.spent)}</div></div>
-        <div class="dm-item"><div class="dm-label">Komisi</div><div class="dm-value">Rp${fmtK(c.komisi)}</div></div>
-        <div class="dm-item"><div class="dm-label">CPO</div><div class="dm-value">${cpoTxt}</div></div>
-        <div class="dm-item"><div class="dm-label">Orders</div><div class="dm-value">${c.orders}</div></div>
-      </div>
-      ${c.fb ? `<div class="decision-metrics" style="margin-top:6px;padding-top:10px;border-top:1px solid #f1f5f9">
-        <div class="dm-item"><div class="dm-label">Impresi</div><div class="dm-value" style="font-size:13px">${impTxt}</div></div>
-        <div class="dm-item"><div class="dm-label">Klik</div><div class="dm-value" style="font-size:13px">${clickTxt}</div></div>
-        <div class="dm-item"><div class="dm-label">CTR</div><div class="dm-value" style="font-size:13px;${c.fb.ctr < 1 ? 'color:#ef4444' : c.fb.ctr > 3 ? 'color:#10b981' : ''}">${ctrTxt}</div></div>
-        <div class="dm-item"><div class="dm-label">CPC</div><div class="dm-value" style="font-size:13px">${cpcTxt}</div></div>
-      </div>` : ''}
-      <div class="decision-reason">${bepLine}${reason}${fbHint}</div>
-    </div>`;
-  }).join('') || '<p class="no-data">Tidak ada data untuk ditampilkan.</p>';
 }
 
 // --- TABLES: SORT & SEARCH --------------------------------------
