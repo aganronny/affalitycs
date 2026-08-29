@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v2.7 - Agustus 2026
+   v2.8 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -731,7 +731,6 @@ function renderKPIs() {
   const totalOrders = new Set(state.filteredShopee.filter(isCountableOrder).map(r => r.orderId)).size;
   const totalProfit = totalKomisi - totalSpent;
   const overallRoas = totalSpent > 0 ? totalKomisi / totalSpent : null;
-  const totalNilai  = state.filteredShopee.reduce((s, r) => s + r.nilaiPembelian, 0);
 
   const kpis = [
     { label: 'Total Komisi Bersih', value: 'Rp ' + fmtK(totalKomisi), count: totalKomisi, format: 'rupiah', sub: 'dari semua campaign', color: 'green',
@@ -747,7 +746,6 @@ function renderKPIs() {
     },
     { label: 'Overall ROAS', value: fmtRoas(overallRoas), count: overallRoas !== null && overallRoas !== undefined ? overallRoas : '', format: 'roas', sub: 'komisi / spend', color: overallRoas && overallRoas >= 2 ? 'green' : 'orange' },
     { label: 'Total Pesanan', value: fmt(totalOrders), count: totalOrders, format: 'plain', sub: 'unique order valid', color: 'blue' },
-    { label: 'Nilai Pembelian', value: 'Rp ' + fmtK(totalNilai), count: totalNilai, format: 'rupiah', sub: 'total GMV', color: 'purple' },
   ];
 
   document.getElementById('kpi-grid').innerHTML = kpis.map(k => `
@@ -838,7 +836,8 @@ function renderSmartReport() {
         Cair <strong>Rp ${fmt(cair)}</strong> · Pending <strong>Rp ${fmt(pending)}</strong>${gagal > 0 ? ' · Gagal <strong>Rp ' + fmt(gagal) + '</strong>' : ''}
         <div style="font-size:11px;color:#94a3b8">komisi pending biasanya cair 10-15 hari kerja</div></div>
       <div class="sr-item"><div class="sr-label">💸 Iklan</div>
-        Spend <strong>Rp ${fmt(totalSpent)}</strong> dalam <strong>${days} hari</strong>${profit < 0 ? ' · defisit <strong>-Rp ' + fmt(Math.abs(profit)) + '</strong>' : ''}</div>
+        Spend <strong>Rp ${fmt(totalSpent)}</strong> dalam <strong>${days} hari</strong>${profit < 0 ? ' · defisit <strong>-Rp ' + fmt(Math.abs(profit)) + '</strong>' : ''}
+        <div style="font-size:12px;color:#64748b">GMV Shopee: Rp ${fmtK(state.filteredShopee.reduce((s, r) => s + r.nilaiPembelian, 0))}</div></div>
       ${best && best.roas >= 1 ? `<div class="sr-item"><div class="sr-label">🚀 Pertahankan & scale</div>
         <strong>${esc(best.name)}</strong> — ROAS ${best.roas.toFixed(2)}x · komisi Rp ${fmt(best.komisi)}</div>` : ''}
       ${worst && worst.roas !== null && worst.roas < 1 ? `<div class="sr-item"><div class="sr-label">⛔ Kandidat pause</div>
@@ -866,7 +865,8 @@ function renderCampaignTab() {
         datasets: [
           { label: 'ROAS', data: roasVals, backgroundColor: colors, borderRadius: 6 },
           { label: 'Break-even (1x)', data: labels.map(() => 1), type: 'line',
-            borderColor: '#94a3b8', borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false }
+            borderColor: '#94a3b8', borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false,
+            datalabels: { display: false } }
         ]
       },
       options: {
@@ -879,48 +879,7 @@ function renderCampaignTab() {
           datalabels: { display: true, anchor: 'end', align: 'end', offset: -2, color: dlColor(),
             font: { weight: 700, size: 10 }, formatter: (v) => v ? v.toFixed(2) + 'x' : '' }
         },
-        scales: { y: { beginAtZero: true, title: { display: true, text: 'ROAS (x)' } } }
-      }
-    });
-  }
-
-  destroyChart('revSpend');
-  const ctxRS = document.getElementById('chart-revenue-spend');
-  if (ctxRS) {
-    const canvas = ensureCanvas(ctxRS);
-    state.charts['revSpend'] = new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels: campaigns.map(c => c.name),
-        datasets: [
-          { label: 'Komisi (Rp)', data: campaigns.map(c => c.komisi), backgroundColor: '#6366f1', borderRadius: 4 },
-          { label: 'Spend (Rp)',  data: campaigns.map(c => c.spent),  backgroundColor: '#f97316', borderRadius: 4 }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'top' } },
-        scales: { y: { ticks: { callback: v => 'Rp' + fmtK(v) } } }
-      }
-    });
-  }
-
-  destroyChart('profit');
-  const ctxPL = document.getElementById('chart-profit');
-  if (ctxPL) {
-    const canvas = ensureCanvas(ctxPL);
-    const profits = campaigns.map(c => c.profit);
-    state.charts['profit'] = new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels: campaigns.map(c => c.name),
-        datasets: [{ label: 'Profit/Loss (Rp)', data: profits,
-          backgroundColor: profits.map(v => v >= 0 ? '#10b981' : '#ef4444'), borderRadius: 4 }]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { ticks: { callback: v => 'Rp' + fmtK(v) } } }
+        scales: { y: { beginAtZero: true, suggestedMax: 1.2, title: { display: true, text: 'ROAS (x)' } } }
       }
     });
   }
@@ -1106,48 +1065,6 @@ function renderComparisonTab() {
       });
     } else {
       ctxLoss.innerHTML = '<div class="chart-empty">Upload file FB Ads untuk melihat funnel klik.</div>';
-    }
-  }
-
-  // -- DROP-OFF CHART: % hilang di setiap tahap --
-  destroyChart('clickCompare');
-  const ctxClick = document.getElementById('chart-click-compare');
-  if (ctxClick) {
-    const hasFbData = campaigns.filter(c => c.fb && c.fbLinkClicks > 0);
-    if (hasFbData.length > 0) {
-      const canvas = ensureCanvas(ctxClick);
-      const labels = hasFbData.map(c => c.name);
-      const dropStage1 = hasFbData.map(c => (c.dropClickToShopeePct != null && isFinite(c.dropClickToShopeePct)) ? parseFloat(c.dropClickToShopeePct.toFixed(1)) : 0);
-      const dropStage2 = hasFbData.map(c => (c.dropShopeeToOrderPct != null && isFinite(c.dropShopeeToOrderPct)) ? parseFloat(c.dropShopeeToOrderPct.toFixed(1)) : 0);
-      const convRate   = hasFbData.map(c => (c.overallConvPct != null && isFinite(c.overallConvPct)) ? parseFloat(c.overallConvPct.toFixed(2)) : 0);
-
-      state.charts['clickCompare'] = new Chart(canvas, {
-        type: 'bar',
-        data: { labels, datasets: [
-          { label: 'Drop: Klik → Shopee (%)', data: dropStage1,
-            backgroundColor: 'rgba(249,115,22,0.75)', borderColor: '#f97316', borderWidth: 1.5, borderRadius: 5, yAxisID: 'y' },
-          { label: 'Drop: Shopee → Order (%)', data: dropStage2,
-            backgroundColor: 'rgba(239,68,68,0.75)', borderColor: '#ef4444', borderWidth: 1.5, borderRadius: 5, yAxisID: 'y' },
-          { label: 'Conv. Rate Klik→Order (%)', data: convRate, type: 'line',
-            borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)',
-            borderWidth: 2.5, pointRadius: 5, pointHoverRadius: 7, fill: false, tension: 0.3, yAxisID: 'y2' }
-        ]},
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (ctx) => {
-            if (ctx.datasetIndex === 0) return `Hilang sebelum masuk Shopee: ${ctx.raw}%`;
-            if (ctx.datasetIndex === 1) return `Lihat tapi tidak order: ${ctx.raw}%`;
-            return `Overall conv: ${ctx.raw}%`;
-          }}}},
-          scales: {
-            y:  { type: 'linear', position: 'left',  title: { display: true, text: '% Drop-off' }, ticks: { callback: v => v + '%' }, min: 0, max: 100 },
-            y2: { type: 'linear', position: 'right', title: { display: true, text: 'Conv. Rate (%)' }, ticks: { callback: v => v + '%' }, grid: { drawOnChartArea: false } }
-          }
-        }
-      });
-    } else {
-      ctxClick.innerHTML = '<div class="chart-empty">Upload file FB Ads untuk melihat drop-off analysis.</div>';
     }
   }
 
@@ -1428,22 +1345,7 @@ function renderStatusTab() {
       data: { labels, datasets: [{ data: counts, backgroundColor: palette, hoverOffset: 8 }] },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.raw} pesanan` } } }
-      }
-    });
-  }
-
-  destroyChart('statusKomisi');
-  const ctxSK = document.getElementById('chart-status-komisi');
-  if (ctxSK) {
-    const canvas = ensureCanvas(ctxSK);
-    state.charts['statusKomisi'] = new Chart(canvas, {
-      type: 'bar',
-      data: { labels, datasets: [{ label: 'Komisi (Rp)', data: komisis, backgroundColor: palette, borderRadius: 4 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { y: { ticks: { callback: v => 'Rp' + fmtK(v) } } }
+        plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${ctx.raw} pesanan · komisi Rp${fmtK(komisis[ctx.dataIndex])}` } } }
       }
     });
   }
@@ -1615,16 +1517,21 @@ function renderFbBreakdown() {
   const wrapGender = document.getElementById('chart-fb-gender');
   const wrapPlatform = document.getElementById('chart-fb-platform');
   const wrapRegion = document.getElementById('chart-fb-region');
+  const secEl = document.getElementById('fb-breakdown-section');
+  const emptyEl = document.getElementById('fb-breakdown-empty');
+  const emptyText = document.getElementById('fb-breakdown-empty-text');
   if (!wrapAge || !wrapGender || !wrapPlatform || !wrapRegion) return;
 
   const bd = state.filteredFbBreakdown || [];
   if (bd.length === 0) {
     ['fbAge', 'fbGender', 'fbPlatform', 'fbRegion'].forEach(k => destroyChart(k));
-    const msg = 'Belum ada data breakdown. Export dari Ads Manager dengan Breakdown (Age / Gender / Platform / Region) diaktifkan, lalu upload sebagai file FB Ads tambahan.';
-    wrapAge.innerHTML = '<div class="chart-empty">' + msg + '</div>';
-    wrapGender.innerHTML = wrapPlatform.innerHTML = wrapRegion.innerHTML = '<div class="chart-empty">' + msg + '</div>';
+    if (secEl) secEl.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = 'flex';
+    if (emptyText) emptyText.innerHTML = 'Belum ada data breakdown. Di <strong>Ads Manager → Reports → Breakdown</strong>, pilih Usia / Gender / Platform / Wilayah, export CSV, lalu upload sebagai file FB Ads tambahan di halaman upload.';
     return;
   }
+  if (secEl) secEl.style.display = 'block';
+  if (emptyEl) emptyEl.style.display = 'none';
 
   const agg = (keyFn, order) => {
     const m = {};

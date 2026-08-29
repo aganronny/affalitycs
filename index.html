@@ -15,7 +15,7 @@
       <div class="logo">
         <span class="logo-icon">📊</span>
         <span class="logo-text">Affalitycs</span>
-        <span class="logo-badge">v2.6</span>
+        <span class="logo-badge">v2.8</span>
       </div>
       <div class="header-meta">
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Ganti tema terang/gelap">🌙</button>
@@ -160,16 +160,6 @@
             <div class="chart-wrap" id="chart-roas"></div>
           </div>
         </div>
-        <div class="chart-row">
-          <div class="chart-card">
-            <div class="chart-title">Revenue vs Spend</div>
-            <div class="chart-wrap" id="chart-revenue-spend"></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">Profit / Loss per Campaign</div>
-            <div class="chart-wrap" id="chart-profit"></div>
-          </div>
-        </div>
         <div class="table-card">
           <div class="table-header">
             <div class="table-title">Detail per Campaign</div>
@@ -258,14 +248,6 @@
           </div>
         </div>
 
-        <!-- Click Comparison: FB Klik vs Shopee Orders -->
-        <div class="chart-row">
-          <div class="chart-card wide">
-            <div class="chart-title">📊 Drop-off Analysis per Campaign <span class="chart-hint">(% hilang di setiap tahap funnel)</span></div>
-            <div class="chart-wrap" id="chart-click-compare"></div>
-          </div>
-        </div>
-
         <!-- Click Insights: Negara & Jam (butuh Click Report) -->
         <div class="chart-row">
           <div class="chart-card">
@@ -279,24 +261,32 @@
         </div>
 
         <!-- Breakdown Iklan FB: Age/Gender/Platform/Region (butuh export breakdown dari Ads Manager) -->
-        <div class="chart-row">
-          <div class="chart-card">
-            <div class="chart-title">👥 Klik per Usia <span class="chart-hint">(breakdown FB Ads)</span></div>
-            <div class="chart-wrap" id="chart-fb-age"></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">⚧ Gender <span class="chart-hint">(breakdown FB Ads)</span></div>
-            <div class="chart-wrap" id="chart-fb-gender"></div>
+        <div class="chart-row" id="fb-breakdown-empty" style="display:none">
+          <div class="chart-card wide">
+            <div class="chart-title">📘 Breakdown Iklan FB <span class="chart-hint">(Usia / Gender / Platform / Wilayah)</span></div>
+            <div class="chart-empty" id="fb-breakdown-empty-text" style="height:110px"></div>
           </div>
         </div>
-        <div class="chart-row">
-          <div class="chart-card">
-            <div class="chart-title">📱 Platform <span class="chart-hint">(breakdown FB Ads)</span></div>
-            <div class="chart-wrap" id="chart-fb-platform"></div>
+        <div id="fb-breakdown-section" style="display:none">
+          <div class="chart-row">
+            <div class="chart-card">
+              <div class="chart-title">👥 Klik per Usia <span class="chart-hint">(breakdown FB Ads)</span></div>
+              <div class="chart-wrap" id="chart-fb-age"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">⚧ Gender <span class="chart-hint">(breakdown FB Ads)</span></div>
+              <div class="chart-wrap" id="chart-fb-gender"></div>
+            </div>
           </div>
-          <div class="chart-card">
-            <div class="chart-title">🗺️ Wilayah Iklan <span class="chart-hint">(breakdown FB Ads, top 8)</span></div>
-            <div class="chart-wrap" id="chart-fb-region"></div>
+          <div class="chart-row">
+            <div class="chart-card">
+              <div class="chart-title">📱 Platform <span class="chart-hint">(breakdown FB Ads)</span></div>
+              <div class="chart-wrap" id="chart-fb-platform"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">🗺️ Wilayah Iklan <span class="chart-hint">(breakdown FB Ads, top 8)</span></div>
+              <div class="chart-wrap" id="chart-fb-region"></div>
+            </div>
           </div>
         </div>
 
@@ -383,13 +373,9 @@
       <!-- TAB: STATUS -->
       <div id="tab-status" class="tab-content">
         <div class="chart-row">
-          <div class="chart-card">
+          <div class="chart-card wide">
             <div class="chart-title">Distribusi Status Pesanan</div>
             <div class="chart-wrap" id="chart-status-pie"></div>
-          </div>
-          <div class="chart-card">
-            <div class="chart-title">Komisi per Status</div>
-            <div class="chart-wrap" id="chart-status-komisi"></div>
           </div>
         </div>
         <div class="status-summary-grid" id="status-summary-grid"></div>
@@ -434,6 +420,6 @@
   <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
   <script src="parsers.js?v=20260829c"></script>
-  <script src="app.js?v=20260829f"></script>
+  <script src="app.js?v=20260829g"></script>
 </body>
 </html>
