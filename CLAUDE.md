@@ -84,6 +84,7 @@ Fitur v3.2 (alat kerja harian):
 - **💾 Backup / 📂 Restore** di filter bar: 1 file JSON isinya riwayat snapshot + sesi upload + mapping — bikin data portable antar perangkat/browser. Restore otomatis buka dashboard kalau backup ada sesi
 - **Kolom Δ ROAS & Δ Spend** di tabel Per Campaign: perbandingan per campaign vs snapshot periode sebelumnya (snapshot sekarang simpan array `campaigns`). Snapshot lama tanpa array → delta tampil '-'
 - `getPrevSnapshot()` = helper tunggal untuk "periode sebelumnya" (dipakai Smart Report & tabel)
+- **Parser versioning**: sesi tersimpan membawa `parserVersion` — restore sesi dari parser lama memunculkan warning "upload ulang" (fitur baru butuh data segar). Naikkan `PARSER_VERSION` tiap kali format hasil parse berubah
 
 Fitur v2.9 (range picker):
 - **Filter tanggal 1 tombol**: klik → dropdown berisi preset sekali-klik (Hari terakhir / 7 hari / 30 hari / Semua data — anchor-nya tanggal data terakhir, bukan hari ini) + kalender mini (mulai Senin). Klik awal → klik akhir → otomatis apply
