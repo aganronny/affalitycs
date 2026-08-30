@@ -215,4 +215,28 @@ t("campaign beda tanggal tidak saling terpengaruh", () => {
   assert.strictEqual(kept.length, 2);
 });
 
+// ---------- export dengan Breakdown: kolom "Link clicks" hilang ----------
+console.log('extractFbRows (breakdown export)');
+t("linkClicks fallback ke 'Results' kalau Result indicator = actions:link_click", () => {
+  const csv = '"Reporting starts","Campaign name",Age,Gender,"Amount spent (IDR)","Results","Result indicator","Clicks (all)","Impressions"\n' +
+    '"2026-08-28","cp01","18-24","female","3094","21","actions:link_click","26","837"\n';
+  const rows = P.extractFbRows(P.fbRawFromCSV(csv));
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].linkClicks, 21);
+  assert.strictEqual(rows[0].impressions, 837);
+  assert.strictEqual(rows[0].spent, 3094);
+});
+t("Results gak dipakai kalau Result indicator bukan link_click", () => {
+  const csv = '"Reporting starts","Campaign name","Amount spent (IDR)","Results","Result indicator","Impressions"\n' +
+    '"2026-08-28","cp01","5000","77","landing_page_view","1000"\n';
+  const rows = P.extractFbRows(P.fbRawFromCSV(csv));
+  assert.strictEqual(rows[0].linkClicks, 0);
+});
+t("file biasa (ada kolom Link clicks) tetap kebaca seperti biasa", () => {
+  const csv = '"Reporting starts","Campaign name","Amount spent (IDR)","Link clicks","Impressions"\n' +
+    '"2026-08-28","cp01","5000","50","1000"\n';
+  const rows = P.extractFbRows(P.fbRawFromCSV(csv));
+  assert.strictEqual(rows[0].linkClicks, 50);
+});
+
 console.log(`\nALL TESTS PASSED (${passed} kasus)`);

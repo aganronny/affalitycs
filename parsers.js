@@ -338,14 +338,29 @@ function extractFbRows(raw) {
     };
     const dateStr = get(['Day', 'Reporting starts', 'Hari', 'Tanggal mulai pelaporan', 'Date', 'Tanggal']);
     const date = parseDateAny(dateStr);
+    const endDate = parseDateAny(get(['Reporting ends', 'Tanggal akhir pelaporan']));
+
+    // Export DENGAN Breakdown gak punya kolom "Link clicks" — klik link pindah ke
+    // kolom "Results" (sah kalau Result indicator = actions:link_click)
+    let linkClicks = parseNum(get(['Link clicks', 'Klik tautan']));
+    if (!linkClicks) {
+      const ri = String(get(['Result indicator', 'Indikator hasil']) || '').toLowerCase();
+      if (ri.includes('link_click')) {
+        const keysLower = keys.map(k => k.toLowerCase());
+        const resultsKey = keysLower.indexOf('results') >= 0 ? keys[keysLower.indexOf('results')]
+          : keys[keysLower.findIndex(k => k.includes('results') && !k.includes('cost'))];
+        if (resultsKey !== undefined) linkClicks = parseNum(row[resultsKey]);
+      }
+    }
 
     campaigns.push({
       date,
+      endDate,
       campaignName,
       spent:            parseSpent(get(['Amount spent', 'amount spent', 'Jumlah yang dibelanjakan'])),
       reach:            parseNum(get(['Reach', 'Jangkauan'])),
       impressions:      parseNum(get(['Impressions', 'Tayangan'])),
-      linkClicks:       parseNum(get(['Link clicks', 'Klik tautan'])),
+      linkClicks,
       allClicks:        parseNum(get(['Clicks (all)', 'Semua klik'])),
       cpc:              parseNum(get(['CPC (cost per link click)', 'CPC (all)', 'BPK'])),
       cpm:              parseNum(get(['CPM', 'BPT'])),

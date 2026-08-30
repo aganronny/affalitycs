@@ -1616,6 +1616,14 @@ function renderSanity() {
       text: `<strong>Kemungkinan spend dobel:</strong> ${dups.length} kombinasi campaign+tanggal muncul lebih dari 1x (total ${totalDup} baris berlebih). Contoh: <strong>${esc(name)}</strong> tanggal ${esc(date)} muncul ${dups[0][1]}x. Cek apakah ada file FB Ads yang periodenya overlap.` });
   }
 
+  // 1b. File FB agregat multi-hari: angka = total seluruh rentang, bukan per hari
+  const ranged = state.filteredFb.filter(c => c.endDate && c.date && c.endDate > c.date);
+  if (ranged.length > 0) {
+    const r0 = ranged[0];
+    warns.push({ type: 'info', icon: '📆',
+      text: `File FB Ads berisi <strong>rentang multi-hari</strong> (${esc(r0.date)} s/d ${esc(r0.endDate)}) — angka campaign adalah <strong>total seluruh rentang</strong>, bukan per hari. Kalau mau analisis per hari, export FB per tanggal.` });
+  }
+
   // 2. Order nyangkut di tag yang gak match campaign FB manapun
   if (state.filteredFb.length > 0) {
     buildCampaignData()
