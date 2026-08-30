@@ -85,6 +85,7 @@ Fitur v3.2 (alat kerja harian):
 - **Kolom Δ ROAS & Δ Spend** di tabel Per Campaign: perbandingan per campaign vs snapshot periode sebelumnya (snapshot sekarang simpan array `campaigns`). Snapshot lama tanpa array → delta tampil '-'
 - `getPrevSnapshot()` = helper tunggal untuk "periode sebelumnya" (dipakai Smart Report & tabel)
 - **Parser versioning**: sesi tersimpan membawa `parserVersion` — restore sesi dari parser lama memunculkan warning "upload ulang" (fitur baru butuh data segar). Naikkan `PARSER_VERSION` tiap kali format hasil parse berubah
+- **File breakdown FB & anti-dobel antar file** (`resolveFbCampaignRows` di parsers.js): file breakdown sah punya banyak baris per (campaign,tanggal) — dikecualikan dari sanity warning spend-dobel. Kalau file breakdown & file biasa sama-sama cover periode sama → baris file biasa yang menang; antar file breakdown → file yang diupload duluan. Jadi boleh upload beberapa file breakdown (Age+Gender, Wilayah, Platform) tanpa spend dobel
 
 Fitur v2.9 (range picker):
 - **Filter tanggal 1 tombol**: klik → dropdown berisi preset sekali-klik (Hari terakhir / 7 hari / 30 hari / Semua data — anchor-nya tanggal data terakhir, bukan hari ini) + kalender mini (mulai Senin). Klik awal → klik akhir → otomatis apply

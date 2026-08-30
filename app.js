@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v3.2.1 - Agustus 2026
+   v3.2.2 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -325,6 +325,7 @@ async function runAnalysis() {
 
     state.fbCampaigns = [];
     state.fbBreakdown = [];
+    let fbFileIdx = 0;
     for (const f of fbFiles) {
       let raw;
       if (f.name.match(/\.csv$/i)) {
@@ -332,10 +333,16 @@ async function runAnalysis() {
       } else {
         raw = fbRawFromXLSX(await readAsArrayBuffer(f));
       }
-      // Satu file FB bisa dipakai dua arah: agregat campaign + breakdown (kalau ada kolomnya)
-      state.fbCampaigns.push(...extractFbRows(raw));
-      state.fbBreakdown.push(...extractFbBreakdown(raw));
+      // Satu file FB dipakai dua arah: agregat campaign + breakdown (kalau ada kolomnya)
+      const bd = extractFbBreakdown(raw);
+      const camps = extractFbRows(raw);
+      camps.forEach(r => { r._fileIdx = fbFileIdx; r._fromBreakdown = bd.length > 0; });
+      state.fbCampaigns.push(...camps);
+      state.fbBreakdown.push(...bd);
+      fbFileIdx++;
     }
+    // Cegah spend dobel antara file breakdown & file campaign biasa
+    state.fbCampaigns = resolveFbCampaignRows(state.fbCampaigns);
 
     // Parse Website Click Report
     state.clickReport = [];
@@ -1594,8 +1601,9 @@ function renderSanity() {
   }
 
   // 1. Kemungkinan spend dobel: campaign+tanggal sama muncul >1x di data FB
+  //    (baris dari file breakdown dikecualikan — multi baris per campaign itu wajarnya)
   const seen = new Map();
-  state.filteredFb.forEach(c => {
+  state.filteredFb.filter(c => !c._fromBreakdown).forEach(c => {
     if (!c.date) return;
     const k = c.campaignName + '|' + c.date;
     seen.set(k, (seen.get(k) || 0) + 1);
@@ -1685,7 +1693,7 @@ function renderFbBreakdown() {
     ['fbAge', 'fbGender', 'fbPlatform', 'fbRegion'].forEach(k => destroyChart(k));
     if (secEl) secEl.style.display = 'none';
     if (emptyEl) emptyEl.style.display = 'flex';
-    if (emptyText) emptyText.innerHTML = 'Belum ada data breakdown. Di <strong>Ads Manager → Reports → Breakdown</strong>, pilih Usia / Gender / Platform / Wilayah, export CSV, lalu upload sebagai file FB Ads tambahan di halaman upload.';
+    if (emptyText) emptyText.innerHTML = 'Belum ada data breakdown. Di <strong>Ads Manager → Reports → Breakdown</strong>: pilih <strong>Usia & Gender</strong> (satu file), atau <strong>Wilayah / Platform</strong> lewat Breakdown → By Delivery (file terpisah). Export CSV, lalu upload sebagai file FB Ads tambahan — boleh beberapa file breakdown sekaligus, spend tidak akan dobel hitung.';
     return;
   }
   if (secEl) secEl.style.display = 'block';

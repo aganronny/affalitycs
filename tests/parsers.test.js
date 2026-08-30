@@ -174,4 +174,45 @@ t("extractFbRows tetap bekerja di file yang sama (agregat campaign)", () => {
   assert.strictEqual(camp[0].campaignName, 'cp01');
 });
 
+// ---------- resolveFbCampaignRows ----------
+console.log('resolveFbCampaignRows');
+const mkRow = (name, date, fromBd, fileIdx) => ({ campaignName: name, date, _fromBreakdown: fromBd, _fileIdx: fileIdx, spent: 100 });
+t("file breakdown saja (4 baris per campaign+tanggal) → semua dipakai, gak ada yang dibuang", () => {
+  const rows = ['18-24', '25-34', '35-44', '45-54'].map((_, i) => mkRow('cp01', '2026-08-29', true, 0));
+  const kept = P.resolveFbCampaignRows(rows);
+  assert.strictEqual(kept.length, 4);
+});
+t("file breakdown + file biasa untuk periode sama → baris biasa yang dipakai", () => {
+  const rows = [
+    mkRow('cp01', '2026-08-29', true, 0),
+    mkRow('cp01', '2026-08-29', true, 0),
+    mkRow('cp01', '2026-08-29', true, 0),
+    mkRow('cp01', '2026-08-29', false, 1),
+  ];
+  const kept = P.resolveFbCampaignRows(rows);
+  assert.strictEqual(kept.length, 1);
+  assert.strictEqual(kept[0]._fromBreakdown, false);
+});
+t("dua file breakdown beda jenis untuk periode sama → file pertama yang dipakai", () => {
+  const rows = [
+    mkRow('cp01', '2026-08-29', true, 0),
+    mkRow('cp01', '2026-08-29', true, 0),
+    mkRow('cp01', '2026-08-29', true, 1),
+    mkRow('cp01', '2026-08-29', true, 1),
+  ];
+  const kept = P.resolveFbCampaignRows(rows);
+  assert.strictEqual(kept.length, 2);
+  assert.ok(kept.every(r => r._fileIdx === 0));
+});
+t("file biasa overlap (dua file biasa) → tetap dipertahankan semua (warning yang bekerja)", () => {
+  const rows = [mkRow('cp01', '2026-08-29', false, 0), mkRow('cp01', '2026-08-29', false, 1)];
+  const kept = P.resolveFbCampaignRows(rows);
+  assert.strictEqual(kept.length, 2);
+});
+t("campaign beda tanggal tidak saling terpengaruh", () => {
+  const rows = [mkRow('cp01', '2026-08-28', false, 0), mkRow('cp01', '2026-08-29', false, 0)];
+  const kept = P.resolveFbCampaignRows(rows);
+  assert.strictEqual(kept.length, 2);
+});
+
 console.log(`\nALL TESTS PASSED (${passed} kasus)`);

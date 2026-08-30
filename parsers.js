@@ -375,6 +375,30 @@ function dedupShopeeRows(rows) {
   return { rows: out, removed };
 }
 
+// --- FB BREAKDOWN vs FILE CAMPAIGN BIASA ------------------------
+// File breakdown berisi beberapa baris per (campaign, tanggal) — itu sah.
+// Aturan anti-dobel antar file:
+//  - Grup (campaign,tanggal) yang punya baris file biasa → pakai baris biasa saja
+//  - Grup yang SEMUA barisnya dari file breakdown → pakai file breakdown pertama saja
+function resolveFbCampaignRows(rows) {
+  const groups = new Map();
+  rows.forEach(r => {
+    const k = r.campaignName + '|' + (r.date || '');
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  });
+  const kept = [];
+  groups.forEach(gr => {
+    if (gr.length === 1) { kept.push(gr[0]); return; }
+    const plain = gr.filter(r => !r._fromBreakdown);
+    if (plain.length > 0) { plain.forEach(r => kept.push(r)); return; }
+    const idxOf = (r) => r._fileIdx === undefined ? 0 : r._fileIdx;
+    const minIdx = Math.min(...gr.map(idxOf));
+    gr.forEach(r => { if (idxOf(r) === minIdx) kept.push(r); });
+  });
+  return kept;
+}
+
 // --- RESOLVE SHOPEE KEY -----------------------------------------
 function resolveShopeeKey(row, fbNameSet, mapping) {
   const tag1 = (row.tag1 || '').trim();
@@ -416,6 +440,7 @@ if (typeof module !== 'undefined' && module.exports) {
     parseShopeeCSV, parseClickReportCSV, dedupShopeeRows,
     fbRawFromCSV, fbRawFromXLSX, parseFbCSV, parseFbXLSX, extractFbRows,
     FB_AGE_ORDER, normalizeFbGender, extractFbBreakdown, parseFbBreakdownCSV, parseFbBreakdownXLSX,
+    resolveFbCampaignRows,
     resolveShopeeKey, resolveClickKey,
   };
 }
