@@ -496,7 +496,7 @@ function saveMapping(m) {
 // Murni storage browser ini — gak ada data yang dikirim ke mana pun.
 // PARSER_VERSION naik tiap kali format hasil parse berubah — sesi lama
 // dikasih warning biar user tahu harus upload ulang.
-const PARSER_VERSION = 2;
+const PARSER_VERSION = 3;
 function idbOpen() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('affalitycs', 2);
@@ -776,11 +776,13 @@ function applyFilters() {
 
   const fbHasDates = state.fbCampaigns.some(c => !!c.date);
   if (fbHasDates) {
-    // FB has daily data, filter exactly like Shopee
+    // FB has daily data, filter exactly like Shopee —
+    // baris multi-hari (ada endDate) cukup rentangnya NIMPA window filter
     state.filteredFb = state.fbCampaigns.filter(c => {
-      if (!c.date) return true;
-      if (start && c.date < start) return false;
-      if (end   && c.date > end)   return false;
+      const s = c.date || '', e = c.endDate || c.date || '';
+      if (!s && !e) return true;
+      if (start && e < start) return false;
+      if (end && s > end) return false;
       return true;
     });
     state.dateRatio = 1; // No proration needed

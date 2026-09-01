@@ -453,6 +453,7 @@ function extractFbAdRows(raw) {
 
     out.push({
       date: parseDateAny(get(['Day', 'Reporting starts', 'Hari', 'Tanggal mulai pelaporan', 'Date', 'Tanggal'])),
+      endDate: parseDateAny(get(['Reporting ends', 'Tanggal akhir pelaporan'])),
       adName,
       adSetName,
       campaignName,
@@ -470,16 +471,17 @@ function synthesizeCampaignRowsFromAds(adsRows) {
   const groups = new Map();
   adsRows.forEach(a => {
     const key = (a.campaignName || a.adName) + '|' + (a.date || '');
-    if (!groups.has(key)) groups.set(key, { campaignName: a.campaignName || a.adName, date: a.date || '', spent: 0, reach: 0, impressions: 0, linkClicks: 0, landingPageViews: 0 });
+    if (!groups.has(key)) groups.set(key, { campaignName: a.campaignName || a.adName, date: a.date || '', endDate: '', spent: 0, reach: 0, impressions: 0, linkClicks: 0, landingPageViews: 0 });
     const g = groups.get(key);
     g.spent += a.spent || 0;
     g.reach += a.reach || 0;
     g.impressions += a.impressions || 0;
     g.linkClicks += a.linkClicks || 0;
     g.landingPageViews += a.landingPageViews || 0;
+    if (a.endDate && a.endDate > g.endDate) g.endDate = a.endDate;
   });
   return [...groups.values()].map(g => ({
-    date: g.date, endDate: '', campaignName: g.campaignName,
+    date: g.date, endDate: g.endDate, campaignName: g.campaignName,
     spent: g.spent, reach: g.reach, impressions: g.impressions,
     linkClicks: g.linkClicks, allClicks: 0, cpc: 0, cpm: 0, ctr: 0,
     landingPageViews: g.landingPageViews, budget: 0, delivery: '',

@@ -282,5 +282,12 @@ t("ad dengan Campaign name → sintesis pakai campaign, bukan ad", () => {
   assert.strictEqual(syn[0].campaignName, 'kampA');
   assert.strictEqual(syn[0].spent, 500);
 });
+t("sintesis membawa endDate terjauh dari Reporting ends", () => {
+  const csv = '"Reporting starts","Reporting ends","Ad name","Amount spent (IDR)"\n' +
+    '"2026-08-28","2026-08-31","ad-x","300"\n' +
+    '"2026-08-28","2026-08-29","ad-x","200"\n';
+  const syn = P.synthesizeCampaignRowsFromAds(P.extractFbAdRows(P.fbRawFromCSV(csv)));
+  assert.strictEqual(syn[0].endDate, '2026-08-31');
+});
 
 console.log(`\nALL TESTS PASSED (${passed} kasus)`);
