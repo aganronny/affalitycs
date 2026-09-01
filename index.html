@@ -133,7 +133,7 @@
           <button class="btn-ghost" onclick="openMapping()">⚙️ Mapping</button>
           <button class="btn-ghost" onclick="window.print()">🖨️ PDF</button>
           <button class="btn-ghost" onclick="exportExcel()">📗 Excel</button>
-          <button class="btn-ghost" onclick="backupData()" title="Download semua data (riwayat + sesi + mapping) sebagai file JSON">💾 Backup</button>
+          <button class="btn-ghost" onclick="backupData()" title="Unduh semua data (riwayat + sesi + mapping) sebagai file JSON">💾 Backup</button>
           <button class="btn-ghost" onclick="document.getElementById('restore-file').click()" title="Pulihkan data dari file backup">📂 Restore</button>
           <button class="btn-ghost danger" onclick="resetAll()">↩️ Upload Ulang</button>
           <input type="file" id="restore-file" accept=".json,application/json" style="display:none" onchange="if (this.files[0]) restoreData(this.files[0]); this.value='';" />
@@ -338,7 +338,7 @@
                   <th onclick="sortTable('tbl-comparison',9)" title="Berapa klik FB yang dibutuhkan per 1 order Shopee">Klik/Order ↕</th>
                   <th onclick="sortTable('tbl-comparison',10)">CPO ↕</th>
                   <th onclick="sortTable('tbl-comparison',11)">Komisi ↕</th>
-                  <th onclick="sortTable('tbl-comparison',12)" title="Komisi bersih per 1.000 klik iklan FB — buat bandingin efisiensi antar campaign">Komisi/1k Klik ↕</th>
+                  <th onclick="sortTable('tbl-comparison',12)" title="Komisi bersih per 1.000 klik iklan FB — untuk membandingkan efisiensi antar campaign">Komisi/1k Klik ↕</th>
                   <th onclick="sortTable('tbl-comparison',13)">ROAS ↕</th>
                 </tr>
               </thead>

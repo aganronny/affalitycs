@@ -10,7 +10,7 @@ const state = {
   fbCampaigns: [],
   fbBreakdown: [],       // Breakdown FB Ads (age/gender/platform/region) kalau file breakdown diupload
   filteredFbBreakdown: [],
-  fbAds: [],             // Export FB level Ad (Ad name) — buat tabel per-ad/adset
+  fbAds: [],             // Export FB level Ad (Ad name) — untuk tabel per-ad/adset
   filteredFbAds: [],
   clickReport: [],      // Website Click Report data
   filteredClicks: [],    // Filtered click report data
@@ -26,7 +26,7 @@ const state = {
 
 // --- HELPERS ---------------------------------------------------
 // fmt, fmtK, fmtRoas, parseNum, parseSpent, esc, normalizeName, splitCSVLine
-// dan semua parser ada di parsers.js (dipakai bareng unit test Node)
+// dan semua parser ada di parsers.js (dipakai bersama unit test Node)
 const colorRoas = (r) => r >= 2 ? 'roas-positive' : r >= 1 ? 'roas-neutral' : 'roas-negative';
 
 // Order "valid" = bukan Belum Dibayar / Dibatalkan / Dikembalikan (untuk hitungan pesanan & funnel).
@@ -70,7 +70,7 @@ function applyTheme(t) {
     Chart.defaults.color = t === 'dark' ? '#cbd5e1' : '#475569';
     Chart.defaults.borderColor = t === 'dark' ? 'rgba(148,163,184,0.15)' : 'rgba(148,163,184,0.18)';
   }
-  // render ulang kalau dashboard lagi kebuka biar chart ikut tema
+  // render ulang kalau dashboard sedang terbuka agar chart mengikuti tema
   if (document.getElementById('section-dashboard') && document.getElementById('section-dashboard').style.display !== 'none' && typeof renderAll === 'function') {
     renderAll();
   }
@@ -232,8 +232,8 @@ function renderRangePanel() {
     <div class="rp-grid">${cells}</div>
     <div class="rp-foot">Klik tanggal awal, lalu tanggal akhir</div>`;
 }
-// Klik di dalam panel gak boleh dianggap "klik luar" — listener dipasang di panel
-// (bukan document) karena innerHTML panel diganti tiap klik, yang bikin target klik
+// Klik di dalam panel tidak boleh dianggap "klik luar" — listener dipasang di panel
+// (bukan document) karena innerHTML panel diganti tiap klik, yang membuat target klik
 // jadi detached node sehingga closest('.range-wrap') gagal di document listener.
 const _rpPanelEl = document.getElementById('range-panel');
 if (_rpPanelEl) _rpPanelEl.addEventListener('click', (ev) => ev.stopPropagation());
@@ -319,7 +319,7 @@ async function runAnalysis() {
       const text = await readAsText(f);
       state.shopeeRows.push(...parseShopeeCSV(text));
     }
-    // Dedup baris identik — file komisi yang overlap gak boleh dobel hitung
+    // Dedup baris identik — file komisi yang overlap tidak boleh dihitung ganda
     const deduped = dedupShopeeRows(state.shopeeRows);
     state.shopeeRows = deduped.rows;
     state.shopeeDupCount = deduped.removed;
@@ -349,7 +349,7 @@ async function runAnalysis() {
       state.fbAds.push(...ads);
       fbFileIdx++;
     }
-    // Cegah spend dobel antara file ad-level/breakdown & file campaign biasa
+    // Cegah biaya iklan terhitung ganda antara file ad-level/breakdown & file campaign biasa
     state.fbCampaigns = resolveFbCampaignRows(state.fbCampaigns);
 
     // Parse Website Click Report
@@ -358,7 +358,7 @@ async function runAnalysis() {
       const text = await readAsText(f);
       state.clickReport.push(...parseClickReportCSV(text));
     }
-    // Dedup klik ID — beberapa file click report yang periodenya overlap tidak dihitung dobel
+    // Dedup klik ID — beberapa file click report yang periodenya tumpang tindih tidak dihitung ganda
     const seenClickIds = new Set();
     state.clickReport = state.clickReport.filter(c => {
       if (!c.clickId) return true;
@@ -415,7 +415,7 @@ async function runAnalysis() {
     }
   } catch (err) {
     hideLoading();
-    alert('Error memproses file: ' + err.message + '\n\nCek Console (F12) untuk detail.');
+    alert('Terjadi kesalahan saat memproses file: ' + err.message + '\n\nBuka Console (F12) untuk detail.');
     console.error(err);
   }
 }
@@ -492,10 +492,10 @@ function saveMapping(m) {
 }
 
 // --- PERSISTENSI SESI (IndexedDB) --------------------------------
-// Data upload disimpan lokal di browser biar refresh gak perlu upload ulang.
-// Murni storage browser ini — gak ada data yang dikirim ke mana pun.
+// Data upload disimpan lokal di browser agar refresh tidak perlu unggah ulang.
+// Murni storage browser ini — tidak ada data yang dikirim ke mana pun.
 // PARSER_VERSION naik tiap kali format hasil parse berubah — sesi lama
-// dikasih warning biar user tahu harus upload ulang.
+// dikasih warning agar diketahui harus mengunggah ulang.
 const PARSER_VERSION = 3;
 function idbOpen() {
   return new Promise((resolve, reject) => {
@@ -528,7 +528,7 @@ async function saveSession() {
       validOrders: document.getElementById('valid-orders-toggle')?.checked !== false,
     };
     db.transaction('session', 'readwrite').objectStore('session').put(data, 'current');
-  } catch (e) { /* storage gak tersedia (mis. private mode) — abaikan */ }
+  } catch (e) { /* storage tidak tersedia (mis. private mode) — abaikan */ }
 }
 
 async function loadSession() {
@@ -560,7 +560,7 @@ async function checkResume() {
     document.getElementById('resume-text').innerHTML =
       `Sesi sebelumnya ditemukan (disimpan ${new Date(s.savedAt).toLocaleString('id-ID')}):` +
       `<br><strong>${fmt(s.shopeeRows.length)}</strong> baris komisi Shopee · <strong>${s.fbCampaigns.length}</strong> baris FB Ads · <strong>${s.clickReport.length}</strong> klik · ${range}` +
-      `<br><span style="font-size:12px;color:#94a3b8">Tersimpan lokal di browser ini — gak ada yang dikirim ke internet.</span>`;
+      `<br><span style="font-size:12px;color:#94a3b8">Tersimpan lokal di browser ini — tidak ada data yang dikirim ke internet.</span>`;
     document.getElementById('resume-banner').style.display = 'flex';
   } catch (e) {}
 }
@@ -655,7 +655,7 @@ async function clearHistory() {
 }
 
 // --- BACKUP / RESTORE (file JSON) ---------------------------------
-// Data terkurung di browser perangkat ini — backup bikin dia portable.
+// Data terkurung di browser perangkat ini — cadangan membuat data portabel.
 function backupData() {
   try {
     const bundle = {
@@ -678,13 +678,13 @@ function backupData() {
     a.download = 'affalitycs-backup-' + todayYmd().replace(/-/g, '') + '.json';
     a.click();
     URL.revokeObjectURL(a.href);
-  } catch (e) { alert('Backup gagal: ' + e.message); }
+  } catch (e) { alert('Pencadangan gagal: ' + e.message); }
 }
 
 async function restoreData(file) {
   try {
     const bundle = JSON.parse(await file.text());
-    if (!bundle || bundle.app !== 'affalitycs') { alert('File ini bukan backup Affalitycs.'); return; }
+    if (!bundle || bundle.app !== 'affalitycs') { alert('File ini bukan cadangan Affalitycs.'); return; }
     const db = await idbOpen();
     let nHist = 0;
     if (Array.isArray(bundle.history)) {
@@ -704,9 +704,9 @@ async function restoreData(file) {
       restoreSession(); // pulihkan sesi + tampilkan dashboard
       return;
     }
-    alert('Restore selesai: ' + nHist + ' snapshot riwayat dipulihkan.');
+    alert('Pemulihan selesai: ' + nHist + ' snapshot riwayat dipulihkan.');
     renderAll();
-  } catch (e) { alert('Restore gagal — file rusak atau bukan backup yang valid. (' + e.message + ')'); }
+  } catch (e) { alert('Pemulihan gagal — file rusak atau bukan cadangan yang valid. (' + e.message + ')'); }
 }
 
 checkResume();
@@ -1072,7 +1072,7 @@ function renderSmartReport() {
       ${worst && worst.roas !== null && worst.roas < 1 ? `<div class="sr-item"><div class="sr-label">⛔ Kandidat pause</div>
         <strong>${esc(worst.name)}</strong> — ROAS ${worst.roas.toFixed(2)}x · rugi -Rp ${fmt(Math.abs(worst.profit))}${worstBep ? ' · ' + worstBep : ''}</div>` : ''}
       ${worstFunnel ? `<div class="sr-item"><div class="sr-label">🔍 Klik bocor terparah</div>
-        <strong>${esc(worstFunnel.name)}</strong> — ${worstFunnel.dropClickToShopeePct.toFixed(0)}% klik gak sampai Shopee (${fmt(worstFunnel.dropClickToShopee)} klik hilang)</div>` : ''}
+        <strong>${esc(worstFunnel.name)}</strong> — ${worstFunnel.dropClickToShopeePct.toFixed(0)}% klik tidak sampai ke Shopee (${fmt(worstFunnel.dropClickToShopee)} klik hilang)</div>` : ''}
     </div>`;
 }
 
@@ -1319,7 +1319,7 @@ function renderComparisonTab() {
         }
       });
     } else {
-      ctxLoss.innerHTML = '<div class="chart-empty">Upload file FB Ads untuk melihat funnel klik.</div>';
+      ctxLoss.innerHTML = '<div class="chart-empty">Unggah file FB Ads untuk melihat funnel klik.</div>';
     }
   }
 
@@ -1527,8 +1527,8 @@ function renderClickInsights() {
   if (!hasClicks && !hasOrders) {
     destroyChart('geo');
     destroyChart('hours');
-    geoWrap.innerHTML  = '<div class="chart-empty">Upload Shopee Click Report untuk melihat distribusi negara.</div>';
-    hourWrap.innerHTML = '<div class="chart-empty">Upload Click Report atau file komisi untuk melihat distribusi jam.</div>';
+    geoWrap.innerHTML  = '<div class="chart-empty">Unggah Shopee Click Report untuk melihat distribusi negara.</div>';
+    hourWrap.innerHTML = '<div class="chart-empty">Unggah Click Report atau file komisi untuk melihat distribusi jam.</div>';
     return;
   }
 
@@ -1556,7 +1556,7 @@ function renderClickInsights() {
     });
   } else {
     destroyChart('geo');
-    geoWrap.innerHTML = '<div class="chart-empty">Upload Shopee Click Report untuk melihat distribusi negara.</div>';
+    geoWrap.innerHTML = '<div class="chart-empty">Unggah Shopee Click Report untuk melihat distribusi negara.</div>';
   }
 
   // Klik vs Order per jam (00-23) — bandingin jam klik iklan vs jam order masuk
@@ -1619,7 +1619,7 @@ function computeAdRows() {
     salesByTag[tag].komisi += r.komisiBersih;
   });
   // tag dari click report juga dihitung kandidat — ad yang tag-nya hidup di click
-  // report tapi belum jualan tetap terhubung (order '-'), bukan dicap gak dikenali
+  // report tapi belum jualan tetap terhubung (order '-'), bukan dianggap tidak dikenali
   const clickTags = new Set();
   state.filteredClicks.forEach(c => { if (c.tag1) clickTags.add(c.tag1); });
   const allTags = [...new Set([...Object.keys(salesByTag), ...clickTags])];
@@ -1718,16 +1718,16 @@ function renderSanity() {
   // 0a. Sesi dari versi parser lama — fitur baru butuh data yang di-parse ulang
   if (state.sessionStale) {
     warns.push({ type: 'warn', icon: '📦',
-      text: `<strong>Sesi ini dibuat dengan versi aplikasi lama.</strong> Beberapa fitur baru (mis. analisis order per jam) butuh data yang di-parse ulang. Klik <strong>↩️ Upload Ulang</strong> lalu upload file yang sama — semua angka tetap, malah lebih lengkap.` });
+      text: `<strong>Sesi ini dibuat dengan versi aplikasi yang lama.</strong> Beberapa fitur baru (misalnya analisis order per jam) memerlukan data yang diproses ulang. Klik <strong>↩️ Upload Ulang</strong> lalu unggah file yang sama — semua angka tetap, malah lebih lengkap.` });
   }
 
   // 0. Baris komisi identik yang dibuang saat upload
   if (state.shopeeDupCount > 0) {
     warns.push({ type: 'warn', icon: '📄',
-      text: `<strong>${state.shopeeDupCount} baris komisi identik dibuang</strong> — kemungkinan lo upload file komisi yang periodenya overlap. Angka di dashboard sudah dibersihkan.` });
+      text: `<strong>${state.shopeeDupCount} baris komisi identik telah dibuang</strong> — kemungkinan ada file komisi yang periodenya tumpang tindih. Angka pada dashboard sudah dibersihkan.` });
   }
 
-  // 1. Kemungkinan spend dobel: campaign+tanggal sama muncul >1x di data FB
+  // 1. Kemungkinan biaya terhitung ganda: campaign+tanggal sama muncul >1x di data FB
   //    (baris dari file breakdown dikecualikan — multi baris per campaign itu wajarnya)
   const seen = new Map();
   state.filteredFb.filter(c => !c._fromBreakdown).forEach(c => {
@@ -1740,7 +1740,7 @@ function renderSanity() {
     const totalDup = dups.reduce((s, [, n]) => s + (n - 1), 0);
     const [name, date] = dups[0][0].split('|');
     warns.push({ type: 'warn', icon: '⚠️',
-      text: `<strong>Kemungkinan spend dobel:</strong> ${dups.length} kombinasi campaign+tanggal muncul lebih dari 1x (total ${totalDup} baris berlebih). Contoh: <strong>${esc(name)}</strong> tanggal ${esc(date)} muncul ${dups[0][1]}x. Cek apakah ada file FB Ads yang periodenya overlap.` });
+      text: `<strong>Kemungkinan biaya iklan terhitung ganda:</strong> ${dups.length} kombinasi campaign+tanggal muncul lebih dari satu kali (total ${totalDup} baris berlebih). Contoh: <strong>${esc(name)}</strong> tanggal ${esc(date)} muncul ${dups[0][1]}x. Periksa apakah ada file FB Ads yang periodenya tumpang tindih.` });
   }
 
   // 1b. File FB agregat multi-hari: angka = total seluruh rentang, bukan per hari
@@ -1748,16 +1748,16 @@ function renderSanity() {
   if (ranged.length > 0) {
     const r0 = ranged[0];
     warns.push({ type: 'info', icon: '📆',
-      text: `File FB Ads berisi <strong>rentang multi-hari</strong> (${esc(r0.date)} s/d ${esc(r0.endDate)}) — angka campaign adalah <strong>total seluruh rentang</strong>, bukan per hari. Kalau mau analisis per hari, export FB per tanggal.` });
+      text: `File FB Ads berisi <strong>rentang multi-hari</strong> (${esc(r0.date)} s/d ${esc(r0.endDate)}) — angka campaign adalah <strong>total seluruh rentang</strong>, bukan per hari. Untuk analisis per hari, export FB per tanggal.` });
   }
 
-  // 2. Order nyangkut di tag yang gak match campaign FB manapun
+  // 2. Order di tag yang tidak cocok dengan campaign FB manapun
   if (state.filteredFb.length > 0) {
     buildCampaignData()
       .filter(c => !c.fb && c.orders > 0 && c.name !== '(tidak ada tag)')
       .forEach(c => {
         warns.push({ type: 'warn', icon: '🔗',
-          text: `<strong>${esc(c.name)}</strong>: ${c.orders} order (komisi Rp ${fmt(c.komisi)}) gak match campaign FB manapun — komisi ini gak kebanding sama spend-nya. Buka <strong>⚙️ Mapping</strong> buat nyambungin.` });
+          text: `<strong>${esc(c.name)}</strong>: ${c.orders} order (komisi Rp ${fmt(c.komisi)}) tidak cocok dengan campaign FB manapun — komisi ini tidak terbanding dengan spend-nya. Buka <strong>⚙️ Mapping</strong> untuk menghubungkannya.` });
       });
   }
 
@@ -1766,12 +1766,12 @@ function renderSanity() {
   if (adStats && adStats.zeroTrace.length > 0) {
     const z = adStats.zeroTrace[0];
     warns.push({ type: 'warn', icon: '🚨',
-      text: `<strong>${adStats.zeroTrace.length} ad spending tapi NOL jejak Shopee</strong> — contoh: <strong>${esc(z.name)}</strong> (spend Rp ${fmt(z.spent)}, ${fmt(z.clicks)} klik FB, tapi 0 klik & 0 order Shopee dengan tag itu). Cek apakah link/tag di ad masih hidup & benar — jangan biarkan budget bocor.` });
+      text: `<strong>${adStats.zeroTrace.length} iklan mengeluarkan biaya tetapi tidak meninggalkan jejak di Shopee</strong> — contoh: <strong>${esc(z.name)}</strong> (biaya Rp ${fmt(z.spent)}, ${fmt(z.clicks)} klik FB, tetapi 0 klik & 0 order Shopee dengan tag tersebut). Periksa apakah link/tag pada iklan masih aktif & benar — jangan biarkan anggaran terbuang.` });
   }
   // 2c. Ad tanpa tag sama sekali (naming) — hanya kalau bukan kasus zero-trace
   if (adStats && adStats.unmatched.length > 0 && adStats.zeroTrace.length === 0) {
     warns.push({ type: 'warn', icon: '🏷️',
-      text: `<strong>${adStats.unmatched.length} ad gak punya tag yang dikenali di namanya</strong> (contoh: <strong>${esc(adStats.unmatched[0])}</strong>) — sales dari ad ini gak bisa dihitung. Pakai naming convention: taruh tag (mis. gacoan01) di nama ad, lalu export ulang level Ad.` });
+      text: `<strong>${adStats.unmatched.length} iklan tidak memiliki tag yang dikenali pada namanya</strong> (contoh: <strong>${esc(adStats.unmatched[0])}</strong>) — penjualan dari iklan ini tidak dapat dihitung. Gunakan konvensi penamaan: cantumkan tag (mis. gacoan01) pada nama iklan, lalu export ulang level Ad.` });
   }
 
   // 3. Coverage Click Report vs periode data
@@ -1780,11 +1780,11 @@ function renderSanity() {
     const clickDays = new Set(state.filteredClicks.map(c => c.date).filter(Boolean));
     if (shopeeDays.size > 0 && clickDays.size < shopeeDays.size) {
       warns.push({ type: 'info', icon: 'ℹ️',
-        text: `Click Report cuma cover <strong>${clickDays.size} dari ${shopeeDays.size} hari</strong> — funnel tahap 2 (klik masuk Shopee) bisa lebih kecil dari kenyataan. Download Click Report untuk periode penuh kalau mau funnel akurat.` });
+        text: `Click Report hanya mencakup <strong>${clickDays.size} dari ${shopeeDays.size} hari</strong> — funnel tahap 2 (klik masuk Shopee) bisa lebih kecil dari kenyataan. Unduh Click Report untuk periode penuh agar funnel akurat.` });
     }
   } else if (state.clickReport.length === 0 && state.filteredFb.some(c => c.landingPageViews > 0)) {
     warns.push({ type: 'info', icon: 'ℹ️',
-      text: `Funnel tahap 2 sekarang pakai <strong>Landing Page Views</strong> dari FB (proxy kasar). Upload <strong>Shopee Website Click Report</strong> biar jumlah klik masuk Shopee akurat.` });
+      text: `Funnel tahap 2 saat ini menggunakan <strong>Landing Page Views</strong> dari FB (perkiraan kasar). Unggah <strong>Shopee Website Click Report</strong> agar jumlah klik masuk Shopee akurat.` });
   }
 
   if (warns.length === 0) { el.style.display = 'none'; return; }
@@ -1800,7 +1800,7 @@ function renderRoasJourney() {
     .sort((a, b) => (a.end || '').localeCompare(b.end || ''));
   destroyChart('roasJourney');
   if (hist.length < 2) {
-    wrap.innerHTML = '<div class="chart-empty">Belum cukup riwayat — lakukan analisis di minimal 2 periode berbeda (mis. minggu lalu & minggu ini), nanti perjalanan ROAS lo muncul di sini otomatis.</div>';
+    wrap.innerHTML = '<div class="chart-empty">Belum cukup riwayat — lakukan analisis pada minimal 2 periode berbeda (misalnya minggu lalu & minggu ini), maka grafik Perjalanan ROAS akan muncul otomatis.</div>';
     return;
   }
   const canvas = ensureCanvas(wrap);
@@ -1841,7 +1841,7 @@ function renderFbBreakdown() {
     ['fbAge', 'fbGender', 'fbPlatform', 'fbRegion'].forEach(k => destroyChart(k));
     if (secEl) secEl.style.display = 'none';
     if (emptyEl) emptyEl.style.display = 'flex';
-    if (emptyText) emptyText.innerHTML = 'Belum ada data breakdown. Di <strong>Ads Manager → Reports → Breakdown</strong>: pilih <strong>Usia & Gender</strong> (satu file), atau <strong>Wilayah / Platform</strong> lewat Breakdown → By Delivery (file terpisah). Export CSV, lalu upload sebagai file FB Ads tambahan — boleh beberapa file breakdown sekaligus, spend tidak akan dobel hitung.';
+    if (emptyText) emptyText.innerHTML = 'Belum ada data breakdown. Di <strong>Ads Manager → Reports → Breakdown</strong>: pilih <strong>Usia & Gender</strong> (satu file), atau <strong>Wilayah / Platform</strong> melalui Breakdown → By Delivery (file terpisah). Export CSV, lalu unggah sebagai file FB Ads tambahan — beberapa file breakdown boleh diunggah sekaligus, biaya tidak akan terhitung ganda.';
     return;
   }
   if (secEl) secEl.style.display = 'block';
@@ -1951,7 +1951,7 @@ function filterProductTable() {
 function exportExcel() {
   try {
     const camps = buildCampaignData().filter(c => c.spent > 0 || c.orders > 0);
-    if (camps.length === 0) { alert('Belum ada data buat diexport.'); return; }
+    if (camps.length === 0) { alert('Belum ada data untuk diekspor.'); return; }
     const wb = XLSX.utils.book_new();
 
     // Ringkasan
@@ -2033,7 +2033,7 @@ function exportTableCSV(tableId, filename) {
       return '"' + txt.replace(/"/g, '""') + '"';
     }).join(',');
   }).join('\r\n');
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM biar Excel baca UTF-8
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM agar Excel membaca UTF-8
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.csv';
@@ -2044,7 +2044,7 @@ function exportTableCSV(tableId, filename) {
 function exportChartPNG(card) {
   const canvas = card.querySelector('.chart-wrap canvas');
   if (!canvas) { alert('Chart belum ter-render (belum ada data).'); return; }
-  // Gambar ulang di canvas putih supaya PNG-nya gak transparan
+  // Gambar ulang di canvas putih supaya PNG-nya tidak transparan
   const tmp = document.createElement('canvas');
   tmp.width = canvas.width;
   tmp.height = canvas.height;
@@ -2068,7 +2068,7 @@ function setupExportButtons() {
     btn.className = 'btn-export';
     btn.type = 'button';
     btn.textContent = '⬇ PNG';
-    btn.title = 'Download chart sebagai PNG';
+    btn.title = 'Unduh grafik sebagai PNG';
     btn.addEventListener('click', () => exportChartPNG(card));
     title.appendChild(btn);
   });
@@ -2080,7 +2080,7 @@ function setupExportButtons() {
     btn.className = 'btn-export';
     btn.type = 'button';
     btn.textContent = '⬇ CSV';
-    btn.title = 'Download tabel sebagai CSV (bisa dibuka di Excel)';
+    btn.title = 'Unduh tabel sebagai CSV (dapat dibuka di Excel)';
     btn.addEventListener('click', () => exportTableCSV(table.id, 'affalitycs_' + table.id.replace('tbl-', '')));
     header.appendChild(btn);
   });

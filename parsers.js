@@ -252,7 +252,7 @@ function extractFbBreakdown(raw) {
   const rows = [];
   for (const row of raw) {
     const keys = Object.keys(row);
-    // exact dulu, baru includes — biar 'Platform' gak nyangkut ke 'Platform position'
+    // exact dulu, baru includes — agar 'Platform' tidak menempel ke 'Platform position'
     const getExact = (patterns) => {
       for (const p of patterns) {
         const k = keys.find(k => k.toLowerCase() === p.toLowerCase());
@@ -465,7 +465,7 @@ function extractFbAdRows(raw) {
   return out;
 }
 
-// Kalau file ad-level gak punya kolom "Campaign name", agregat campaign
+// Jika file ad-level tidak memiliki kolom "Campaign name", agregat campaign
 // disintesis dari baris ad (jumlah semua ad = total campaign).
 function synthesizeCampaignRowsFromAds(adsRows) {
   const groups = new Map();
