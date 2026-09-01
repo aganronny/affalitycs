@@ -1620,7 +1620,9 @@ function computeAdRows() {
   state.filteredClicks.forEach(c => { if (c.tag1) clickTags.add(c.tag1); });
   const allTags = [...new Set([...Object.keys(salesByTag), ...clickTags])];
 
-  // matching toleran: cek apa adanya dulu, lalu versi ternormalisasi (spasi/strip/dot diabaikan)
+  // matching toleran: cek apa adanya dulu, lalu versi ternormalisasi (spasi/strip/dot diabaikan).
+  // Guard: digit setelah tag = kelanjutan angka lain ('gacoan010' ≠ 'gacoan01') → tolak.
+  // Huruf setelah tag = kata biasa ('gacoan01video' = ad video) → terima.
   const tagForAd = (adName) => {
     const lower = String(adName || '').toLowerCase();
     const nAd = normalizeName(adName);
@@ -1631,10 +1633,10 @@ function computeAdRows() {
       if (!nT) continue;
       let hit = false;
       const i = lower.indexOf(lt);
-      if (i >= 0 && !/[a-z0-9]/.test(lower.charAt(i + lt.length))) hit = true;
+      if (i >= 0 && !/\d/.test(lower.charAt(i + lt.length))) hit = true;
       if (!hit) {
         const j = nAd.indexOf(nT);
-        if (j >= 0 && !/[a-z0-9]/.test(nAd.charAt(j + nT.length))) hit = true;
+        if (j >= 0 && !/\d/.test(nAd.charAt(j + nT.length))) hit = true;
       }
       if (hit && (!best || lt.length > best.length)) best = t;
     }
