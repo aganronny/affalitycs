@@ -15,7 +15,7 @@
       <div class="logo">
         <span class="logo-icon">📊</span>
         <span class="logo-text">Affalitycs</span>
-        <span class="logo-badge">v3.2</span>
+        <span class="logo-badge">v3.3</span>
       </div>
       <div class="header-meta">
         <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Ganti tema terang/gelap">🌙</button>
@@ -57,7 +57,7 @@
         <div class="upload-card" id="drop-fb">
           <div class="upload-icon">📘</div>
           <div class="upload-label">Facebook Ads Report</div>
-          <div class="upload-hint">File XLSX, XLS, atau CSV dari Meta Ads Manager (bisa lebih dari 1 file)</div>
+          <div class="upload-hint">File XLSX, XLS, atau CSV dari Meta Ads Manager (boleh beberapa file — level Campaign, Ad Set, atau Ad)</div>
           <input type="file" id="file-fb" accept=".xlsx,.xls,.csv" multiple hidden />
           <button class="btn-upload" onclick="document.getElementById('file-fb').click()">Pilih File</button>
           <div class="upload-status" id="status-fb">Belum ada file</div>
@@ -190,6 +190,29 @@
                 </tr>
               </thead>
               <tbody id="tbody-campaign"></tbody>
+            </table>
+          </div>
+        </div>
+      <!-- Detail per Ad / Ad Set (butuh export level Ad dari Ads Manager) -->
+        <div class="table-card" id="ads-table-card" style="display:none">
+          <div class="table-header">
+            <div class="table-title">📋 Detail per Ad / Ad Set <span class="chart-hint">(tag di nama ad → sales per ad)</span></div>
+          </div>
+          <div class="table-wrap">
+            <table id="tbl-ads">
+              <thead>
+                <tr>
+                  <th onclick="sortTable('tbl-ads',0)">Ad ↕</th>
+                  <th onclick="sortTable('tbl-ads',1)">Ad Set ↕</th>
+                  <th onclick="sortTable('tbl-ads',2)">Spend (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-ads',3)">Klik FB ↕</th>
+                  <th onclick="sortTable('tbl-ads',4)">Orders ↕</th>
+                  <th onclick="sortTable('tbl-ads',5)">Komisi (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-ads',6)">ROAS ↕</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-ads"></tbody>
             </table>
           </div>
         </div>
@@ -364,7 +387,7 @@
   <script src="vendor/chart.umd.min.js"></script>
   <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
-  <script src="parsers.js?v=20260829f"></script>
-  <script src="app.js?v=20260829q"></script>
+  <script src="parsers.js?v=20260829g"></script>
+  <script src="app.js?v=20260829r"></script>
 </body>
 </html>

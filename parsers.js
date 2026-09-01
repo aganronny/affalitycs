@@ -309,6 +309,23 @@ function parseFbBreakdownXLSX(arrayBuffer) {
   return extractFbBreakdown(fbRawFromXLSX(arrayBuffer));
 }
 
+// Klik link: export biasa punya kolom "Link clicks"; export dengan Breakdown/level lain
+// kadang kehilangan kolom itu — fallback ke "Results" kalau Result indicator = actions:link_click
+function fbLinkClicksOf(row, keys, get) {
+  let lc = parseNum(get(['Link clicks', 'Klik tautan']));
+  if (!lc) {
+    const ri = String(get(['Result indicator', 'Indikator hasil']) || '').toLowerCase();
+    if (ri.includes('link_click')) {
+      const keysLower = keys.map(k => k.toLowerCase());
+      const iExact = keysLower.indexOf('results');
+      const iInc = keysLower.findIndex(k => k.includes('results') && !k.includes('cost'));
+      const key = iExact >= 0 ? keys[iExact] : (iInc >= 0 ? keys[iInc] : undefined);
+      if (key !== undefined) lc = parseNum(row[key]);
+    }
+  }
+  return lc || 0;
+}
+
 // --- SHARED FB ROW EXTRACTOR ------------------------------------
 function extractFbRows(raw) {
   const campaigns = [];
@@ -339,19 +356,7 @@ function extractFbRows(raw) {
     const dateStr = get(['Day', 'Reporting starts', 'Hari', 'Tanggal mulai pelaporan', 'Date', 'Tanggal']);
     const date = parseDateAny(dateStr);
     const endDate = parseDateAny(get(['Reporting ends', 'Tanggal akhir pelaporan']));
-
-    // Export DENGAN Breakdown gak punya kolom "Link clicks" — klik link pindah ke
-    // kolom "Results" (sah kalau Result indicator = actions:link_click)
-    let linkClicks = parseNum(get(['Link clicks', 'Klik tautan']));
-    if (!linkClicks) {
-      const ri = String(get(['Result indicator', 'Indikator hasil']) || '').toLowerCase();
-      if (ri.includes('link_click')) {
-        const keysLower = keys.map(k => k.toLowerCase());
-        const resultsKey = keysLower.indexOf('results') >= 0 ? keys[keysLower.indexOf('results')]
-          : keys[keysLower.findIndex(k => k.includes('results') && !k.includes('cost'))];
-        if (resultsKey !== undefined) linkClicks = parseNum(row[resultsKey]);
-      }
-    }
+    const linkClicks = fbLinkClicksOf(row, keys, get);
 
     campaigns.push({
       date,
@@ -414,6 +419,51 @@ function resolveFbCampaignRows(rows) {
   return kept;
 }
 
+// --- FB ADS LEVEL AD (Ad name / Ad set name) ---------------------
+// Export dari Ads Manager dengan level "Ad": tiap baris = satu iklan.
+// Satu campaign bisa punya banyak adset & ad, masing-masing dengan tag sendiri
+// (tag ditanam di NAMA ad) — tabel per-ad menjawab "ad mana yang jualan".
+function extractFbAdRows(raw) {
+  const out = [];
+  for (const row of raw) {
+    const keys = Object.keys(row);
+    const get = (patterns) => {
+      for (const p of patterns) {
+        const k = keys.find(k => k.toLowerCase().includes(p.toLowerCase()));
+        if (k !== undefined) return row[k];
+      }
+      return '';
+    };
+    const adName = String(get(['Ad name', 'Nama iklan']) || '').trim();
+    if (!adName || adName === 'Ad name' || /^\d{4}-\d{2}-\d{2}$/.test(adName)) continue;
+    const adSetName = String(get(['Ad set name', 'Nama set iklan']) || '').trim();
+    const campaignName = String(get(['Campaign name', 'nama kampanye', 'nama campaign']) || '').trim();
+
+    const parseDateAny = (v) => {
+      const rawd = String(v || '').trim();
+      if (!rawd) return '';
+      let m = rawd.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+      m = rawd.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      m = rawd.match(/(\d{4})\/(\d{2})\/(\d{2})/);
+      if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+      return '';
+    };
+
+    out.push({
+      date: parseDateAny(get(['Day', 'Reporting starts', 'Hari', 'Tanggal mulai pelaporan', 'Date', 'Tanggal'])),
+      adName,
+      adSetName,
+      campaignName,
+      spent:       parseSpent(get(['Amount spent', 'Jumlah yang dibelanjakan'])),
+      impressions: parseNum(get(['Impressions', 'Tayangan'])),
+      linkClicks:  fbLinkClicksOf(row, keys, get),
+    });
+  }
+  return out;
+}
+
 // --- RESOLVE SHOPEE KEY -----------------------------------------
 function resolveShopeeKey(row, fbNameSet, mapping) {
   const tag1 = (row.tag1 || '').trim();
@@ -456,6 +506,7 @@ if (typeof module !== 'undefined' && module.exports) {
     fbRawFromCSV, fbRawFromXLSX, parseFbCSV, parseFbXLSX, extractFbRows,
     FB_AGE_ORDER, normalizeFbGender, extractFbBreakdown, parseFbBreakdownCSV, parseFbBreakdownXLSX,
     resolveFbCampaignRows,
+    extractFbAdRows,
     resolveShopeeKey, resolveClickKey,
   };
 }

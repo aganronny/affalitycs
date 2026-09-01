@@ -1,7 +1,7 @@
 /* ============================================================
    AFFALITYCS - app.js
    Shopee Affiliate  Facebook Ads Analytics Dashboard
-   v3.2.2 - Agustus 2026
+   v3.3 - Agustus 2026
    ============================================================ */
 
 // --- STATE -----------------------------------------------------
@@ -10,6 +10,8 @@ const state = {
   fbCampaigns: [],
   fbBreakdown: [],       // Breakdown FB Ads (age/gender/platform/region) kalau file breakdown diupload
   filteredFbBreakdown: [],
+  fbAds: [],             // Export FB level Ad (Ad name) — buat tabel per-ad/adset
+  filteredFbAds: [],
   clickReport: [],      // Website Click Report data
   filteredClicks: [],    // Filtered click report data
   mapping: {},
@@ -325,6 +327,7 @@ async function runAnalysis() {
 
     state.fbCampaigns = [];
     state.fbBreakdown = [];
+    state.fbAds = [];
     let fbFileIdx = 0;
     for (const f of fbFiles) {
       let raw;
@@ -333,15 +336,18 @@ async function runAnalysis() {
       } else {
         raw = fbRawFromXLSX(await readAsArrayBuffer(f));
       }
-      // Satu file FB dipakai dua arah: agregat campaign + breakdown (kalau ada kolomnya)
+      // Satu file FB dipakai tiga arah: agregat campaign + breakdown + per-ad (kalau ada kolomnya)
       const bd = extractFbBreakdown(raw);
+      const ads = extractFbAdRows(raw);
       const camps = extractFbRows(raw);
-      camps.forEach(r => { r._fileIdx = fbFileIdx; r._fromBreakdown = bd.length > 0; });
+      // file ad-level & breakdown = sumber multi-baris per campaign (sah)
+      camps.forEach(r => { r._fileIdx = fbFileIdx; r._fromBreakdown = bd.length > 0 || ads.length > 0; });
       state.fbCampaigns.push(...camps);
       state.fbBreakdown.push(...bd);
+      state.fbAds.push(...ads);
       fbFileIdx++;
     }
-    // Cegah spend dobel antara file breakdown & file campaign biasa
+    // Cegah spend dobel antara file ad-level/breakdown & file campaign biasa
     state.fbCampaigns = resolveFbCampaignRows(state.fbCampaigns);
 
     // Parse Website Click Report
@@ -511,6 +517,7 @@ async function saveSession() {
       shopeeRows: state.shopeeRows,
       fbCampaigns: state.fbCampaigns,
       fbBreakdown: state.fbBreakdown,
+      fbAds: state.fbAds,
       clickReport: state.clickReport,
       mapping: state.mapping,
       filterStart: document.getElementById('filter-start').value,
@@ -563,6 +570,7 @@ async function restoreSession() {
   state.shopeeRows = s.shopeeRows || [];
   state.fbCampaigns = s.fbCampaigns || [];
   state.fbBreakdown = s.fbBreakdown || [];
+  state.fbAds = s.fbAds || [];
   state.clickReport = s.clickReport || [];
   state.shopeeDupCount = 0;
   state.mapping = s.mapping || {};
@@ -790,6 +798,13 @@ function applyFilters() {
     if (!b.date) return true;
     if (start && b.date < start) return false;
     if (end   && b.date > end)   return false;
+    return true;
+  });
+  // Filter data per-ad by date
+  state.filteredFbAds = state.fbAds.filter(a => {
+    if (!a.date) return true;
+    if (start && a.date < start) return false;
+    if (end   && a.date > end)   return false;
     return true;
   });
   // Filter click report by date (per-batas, konsisten dengan filter Shopee & FB)
@@ -1130,6 +1145,8 @@ function renderCampaignTab() {
       <td>${getStatusBadge(c.roas, c.spent)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="13" class="no-data">Tidak ada data campaign</td></tr>';
+
+  renderAdsTable();
 }
 
 function getStatusBadge(roas, spent) {
@@ -1582,6 +1599,88 @@ function renderClickInsights() {
   });
 }
 
+// --- PER AD / AD SET (butuh export level Ad) ---------------------
+// Tag ditanam di NAMA ad — join antara file komisi Shopee dan export FB level Ad.
+function computeAdRows() {
+  const ads = state.filteredFbAds || [];
+  if (ads.length === 0) return [];
+
+  // penjualan per tag (dari file komisi, unique order valid)
+  const salesByTag = {};
+  state.filteredShopee.forEach(r => {
+    const tag = (r.tag1 || r.tag3 || '').trim();
+    if (!tag) return;
+    if (!salesByTag[tag]) salesByTag[tag] = { orders: new Set(), komisi: 0 };
+    if (isCountableOrder(r)) salesByTag[tag].orders.add(r.orderId);
+    salesByTag[tag].komisi += r.komisiBersih;
+  });
+  const tags = Object.keys(salesByTag);
+  const tagForAd = (adName) => {
+    const lower = String(adName || '').toLowerCase();
+    let best = null;
+    for (const t of tags) {
+      const lt = t.toLowerCase();
+      const i = lower.indexOf(lt);
+      if (i < 0) continue;
+      // guard 'gacoan010' tidak boleh match 'gacoan01': huruf/angka nempel setelah tag = bukan
+      if (/[a-z0-9]/.test(lower.charAt(i + lt.length))) continue;
+      if (!best || lt.length > best.length) best = t;
+    }
+    return best;
+  };
+
+  // agregat per ad (lintas tanggal dalam rentang filter)
+  const byAd = {};
+  ads.forEach(a => {
+    if (!byAd[a.adName]) byAd[a.adName] = { adName: a.adName, adSetName: a.adSetName || '-', campaignName: a.campaignName || '-', spent: 0, linkClicks: 0, impressions: 0 };
+    byAd[a.adName].spent += a.spent || 0;
+    byAd[a.adName].linkClicks += a.linkClicks || 0;
+    byAd[a.adName].impressions += a.impressions || 0;
+  });
+
+  const ppn = document.getElementById('ppn-toggle')?.checked ? 1.11 : 1;
+  const rows = Object.values(byAd).map(a => {
+    const tag = tagForAd(a.adName);
+    const sale = tag ? salesByTag[tag] : null;
+    const orders = sale ? sale.orders.size : null;
+    const komisi = sale ? sale.komisi : null;
+    const spent = a.spent * ppn;
+    const roas = spent > 0 && komisi !== null ? komisi / spent : null;
+    const cpo = spent > 0 && orders ? spent / orders : null;
+    return { ...a, spent, orders, komisi, roas, cpo, tag, matched: !!tag };
+  });
+  // ad dengan ROAS dulu (keputusan), tanpa data menyusul
+  rows.sort((a, b) => (b.roas ?? -1) - (a.roas ?? -1));
+  state._adMatchStats = { unmatched: rows.filter(r => !r.matched).map(r => r.adName) };
+  return rows;
+}
+
+function renderAdsTable() {
+  const card = document.getElementById('ads-table-card');
+  const tbody = document.getElementById('tbody-ads');
+  if (!card || !tbody) return;
+  const rows = computeAdRows();
+  if (rows.length === 0) {
+    card.style.display = 'none';
+    state._adMatchStats = null;
+    return;
+  }
+  card.style.display = 'block';
+  tbody.innerHTML = rows.map(r => {
+    const roasTxt = r.roas !== null ? r.roas.toFixed(2) + 'x' : '-';
+    return `<tr>
+      <td><strong>${esc(r.adName)}</strong>${r.tag ? ' <span class="badge badge-blue" style="font-size:10px">' + esc(r.tag) + '</span>' : ''}</td>
+      <td>${esc(r.adSetName)}</td>
+      <td>${r.spent > 0 ? 'Rp ' + fmt(r.spent) : '-'}</td>
+      <td>${fmt(r.linkClicks)}</td>
+      <td>${r.orders !== null ? r.orders : '-'}</td>
+      <td>${r.komisi !== null ? 'Rp ' + fmt(r.komisi) : '-'}</td>
+      <td class="${r.roas !== null ? colorRoas(r.roas) : ''}">${roasTxt}</td>
+      <td>${getStatusBadge(r.roas, r.spent)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="no-data">Tidak ada data ad</td></tr>';
+}
+
 // --- SANITY WARNINGS (guard data aneh) ---------------------------
 function renderSanity() {
   const el = document.getElementById('sanity-warnings');
@@ -1632,6 +1731,13 @@ function renderSanity() {
         warns.push({ type: 'warn', icon: '🔗',
           text: `<strong>${esc(c.name)}</strong>: ${c.orders} order (komisi Rp ${fmt(c.komisi)}) gak match campaign FB manapun — komisi ini gak kebanding sama spend-nya. Buka <strong>⚙️ Mapping</strong> buat nyambungin.` });
       });
+  }
+
+  // 2b. Ad yang gak punya tag di namanya — order-nya gak bisa diatribusi
+  const adStats = state._adMatchStats;
+  if (adStats && adStats.unmatched.length > 0) {
+    warns.push({ type: 'warn', icon: '🏷️',
+      text: `<strong>${adStats.unmatched.length} ad gak punya tag yang dikenali di namanya</strong> (contoh: <strong>${esc(adStats.unmatched[0])}</strong>) — sales dari ad ini gak bisa dihitung. Pakai naming convention: taruh tag (mis. gacoan01) di nama ad, lalu export ulang level Ad.` });
   }
 
   // 3. Coverage Click Report vs periode data
@@ -1858,6 +1964,18 @@ function exportExcel() {
       Status: s.status, Orders: s.count, Komisi: Math.round(s.komisi),
     }))), 'Status Pesanan');
 
+    // Per Ad (kalau ada export level Ad)
+    const adRows = computeAdRows();
+    if (adRows.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(adRows.map(a => ({
+        Ad: a.adName, 'Ad Set': a.adSetName, Campaign: a.campaignName, Tag: a.tag || '',
+        Spend: Math.round(a.spent), 'Klik FB': a.linkClicks,
+        Orders: a.orders !== null ? a.orders : '',
+        Komisi: a.komisi !== null ? Math.round(a.komisi) : '',
+        ROAS: a.roas !== null ? +a.roas.toFixed(2) : '',
+      }))), 'Per Ad');
+    }
+
     // Riwayat
     if (state.history.length > 0) {
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.history.map(h => ({
@@ -1958,6 +2076,7 @@ function resetAll() {
   shopeeFiles = []; fbFiles = []; clickFiles = [];
   state.shopeeRows = []; state.fbCampaigns = []; state.clickReport = [];
   state.fbBreakdown = []; state.filteredFbBreakdown = [];
+  state.fbAds = []; state.filteredFbAds = [];
   state.shopeeDupCount = 0;
   state.filteredShopee = []; state.filteredFb = []; state.filteredClicks = [];
   Object.keys(state.charts).forEach(k => { try { state.charts[k].destroy(); } catch {} });

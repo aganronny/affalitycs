@@ -239,4 +239,26 @@ t("file biasa (ada kolom Link clicks) tetap kebaca seperti biasa", () => {
   assert.strictEqual(rows[0].linkClicks, 50);
 });
 
+// ---------- extractFbAdRows (export level Ad) ----------
+console.log('extractFbAdRows');
+t("export level Ad: Ad name + Ad set + Campaign + Results fallback", () => {
+  const csv = '"Reporting starts","Campaign name","Ad set name","Ad name","Amount spent (IDR)","Results","Result indicator","Impressions"\n' +
+    '"2026-08-28","gacoan","gacoan01-broad","gacoan01-video-A","15000","120","actions:link_click","3000"\n' +
+    '"2026-08-28","cp-x","cs-x","TanpaTag Ad 123","","5","actions:link_click","100"\n';
+  const rows = P.extractFbAdRows(P.fbRawFromCSV(csv));
+  assert.strictEqual(rows.length, 2);
+  assert.strictEqual(rows[0].adName, 'gacoan01-video-A');
+  assert.strictEqual(rows[0].campaignName, 'gacoan');
+  assert.strictEqual(rows[0].linkClicks, 120);
+  assert.strictEqual(rows[0].spent, 15000);
+});
+t("file campaign level (tanpa kolom Ad name) -> array kosong", () => {
+  const csv = '"Reporting starts","Campaign name","Amount spent (IDR)","Link clicks"\n"2026-08-28","cp01","5000","50"\n';
+  assert.strictEqual(P.extractFbAdRows(P.fbRawFromCSV(csv)).length, 0);
+});
+t("baris tanggal/total dibuang (bukan ad)", () => {
+  const csv = '"Reporting starts","Campaign name","Ad name","Amount spent (IDR)"\n"2026-08-28","2026-08-28","2026-08-28","100"\n';
+  assert.strictEqual(P.extractFbAdRows(P.fbRawFromCSV(csv)).length, 0);
+});
+
 console.log(`\nALL TESTS PASSED (${passed} kasus)`);

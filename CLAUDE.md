@@ -87,6 +87,13 @@ Fitur v3.2 (alat kerja harian):
 - **Parser versioning**: sesi tersimpan membawa `parserVersion` — restore sesi dari parser lama memunculkan warning "upload ulang" (fitur baru butuh data segar). Naikkan `PARSER_VERSION` tiap kali format hasil parse berubah
 - **File breakdown FB & anti-dobel antar file** (`resolveFbCampaignRows` di parsers.js): file breakdown sah punya banyak baris per (campaign,tanggal) — dikecualikan dari sanity warning spend-dobel. Kalau file breakdown & file biasa sama-sama cover periode sama → baris file biasa yang menang; antar file breakdown → file yang diupload duluan. Jadi boleh upload beberapa file breakdown (Age+Gender, Wilayah, Platform) tanpa spend dobel
 
+Fitur v3.3 (per Ad / Ad Set):
+- **Export level Ad** dari Ads Manager (punya kolom `Ad name` + `Ad set name`) → tabel **"Detail per Ad / Ad Set"** di tab Per Campaign: Spend/Klik/Orders/Komisi/ROAS per ad, urut ROAS, sheet "Per Ad" di export Excel
+- **Join tag ↔ nama ad**: tag ditanam di nama ad (naming convention wajib, mis. `gacoan01-video-A`); matching = substring case-insensitive dengan guard batas (`gacoan010` TIDAK match `gacoan01`). Ad tanpa tag → sanity warning "naming convention"
+- Satu campaign bisa >1 adset & ad, masing-masing tag berbeda — tabel per-ad menjawab "ad/adset mana yang jualan"
+- File ad-level juga ikut agregat campaign (jumlah ad-nya = total campaign) lewat `_fromBreakdown` marker; kalau campur dengan file campaign level, campaign level yang menang (resolveFbCampaignRows)
+- `fbLinkClicksOf` = helper shared fallback `Results` (actions:link_click) — dipakai extractFbRows & extractFbAdRows
+
 Fitur v2.9 (range picker):
 - **Filter tanggal 1 tombol**: klik → dropdown berisi preset sekali-klik (Hari terakhir / 7 hari / 30 hari / Semua data — anchor-nya tanggal data terakhir, bukan hari ini) + kalender mini (mulai Senin). Klik awal → klik akhir → otomatis apply
 - `filter-start`/`filter-end` (input date tersembunyi) tetap SATU SUMBER KEBENARAN semua logika filter — picker cuma lapisan tampilan. Set tanggal programatik WAJIB lewat `setRange()` (bukan set .value langsung) biar label tombol ikut ter-update
