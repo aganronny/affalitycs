@@ -1,0 +1,9 @@
+# Internal
+/Stable/
+/memory/
+/CLAUDE.md
+
+# OS / editor
+Thumbs.db
+.DS_Store
+*.log
