@@ -374,7 +374,11 @@ function extractFbRows(raw) {
       ctr:              parseNum(get(['CTR (link click', 'CTR (all)', 'RKT'])),
       landingPageViews: parseNum(get(['Landing page views', 'Tampilan halaman landing'])),
       budget:           parseNum(get(['Ad set budget', 'Budget', 'Anggaran'])),
-      delivery:         String(get(['Campaign delivery', 'Pengiriman kampanye']) || '').trim(),
+      delivery:         (() => {
+        const d = String(get(['Campaign delivery', 'Pengiriman kampanye', 'Delivery status', 'Status pengiriman']) || '').trim().toLowerCase();
+        // format baru Ads Manager: 'not_delivering' ≈ nonaktif
+        return (d.includes('not_delivering') || d.includes('inactive')) ? 'inactive' : d;
+      })(),
     });
   }
   return campaigns;
