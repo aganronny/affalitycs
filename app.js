@@ -1166,18 +1166,21 @@ function getStatusBadge(roas, spent) {
 function computeProductRows() {
   const byProduct = {};
   const fbNameSet = new Set(state.filteredFb.map(c => c.campaignName));
+  // Kelompokkan per ID Barang (konsisten lintas varian/judul), bukan per nama.
+  // Nama yang ditampilkan = judul terpanjang (judul asli bisa sedikit beda antar baris).
   state.filteredShopee.forEach(r => {
-    const key = r.barang || '(tidak diketahui)';
-    if (!byProduct[key]) byProduct[key] = { name: key, kategori: r.kategori1 || '-', orders: new Set(), nilai: 0, komisi: 0, campaigns: new Set() };
-    if (isCountableOrder(r)) byProduct[key].orders.add(r.orderId);
-    byProduct[key].nilai  += r.nilaiPembelian;
-    byProduct[key].komisi += r.komisiBersih;
+    const id = r.idBarang || r.barang || '(tidak diketahui)';
+    if (!byProduct[id]) byProduct[id] = { name: r.barang || '(tidak diketahui)', kategori: r.kategori1 || '-', orders: new Set(), nilai: 0, komisi: 0, campaigns: new Set() };
+    if (r.barang && r.barang.length > byProduct[id].name.length) byProduct[id].name = r.barang;
+    if (isCountableOrder(r)) byProduct[id].orders.add(r.orderId);
+    byProduct[id].nilai  += r.nilaiPembelian;
+    byProduct[id].komisi += r.komisiBersih;
     const { key: campKey } = resolveShopeeKey(r, fbNameSet, state.mapping);
-    byProduct[key].campaigns.add(campKey);
+    byProduct[id].campaigns.add(campKey);
   });
   return Object.values(byProduct)
     .map(p => ({ ...p, orders: p.orders.size, campaigns: [...p.campaigns] }))
-    .sort((a, b) => b.orders - a.orders);
+    .sort((a, b) => b.orders - a.orders || b.komisi - a.komisi);
 }
 
 function renderProductTab() {

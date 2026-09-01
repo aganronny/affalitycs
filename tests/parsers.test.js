@@ -88,6 +88,14 @@ t("orderHour null kalau Waktu Pemesanan kosong/rusak", () => {
   const rows = P.parseShopeeCSV(csv);
   assert.strictEqual(rows[0].orderHour, null);
 });
+t("ID Barang ikut terbaca (kunci pengelompokan produk)", () => {
+  const csv = 'ID Pemesanan,Status Pesanan,Waktu Pemesanan,Nama Barange,ID Barang,Komisi Bersih Affiliate (Rp),Tag_link1\n' +
+    'ORD7,Tertunda,2026-08-28 10:00,Judul A versi pendek,999888,100,cp01\n' +
+    'ORD7,Tertunda,2026-08-28 10:00,Judul A versi pendek (varian lain judul),999888,0,cp01\n';
+  const rows = P.parseShopeeCSV(csv);
+  assert.strictEqual(rows[0].idBarang, '999888');
+  assert.strictEqual(rows[1].idBarang, '999888');
+});
 
 // ---------- parseClickReportCSV ----------
 console.log('parseClickReportCSV');

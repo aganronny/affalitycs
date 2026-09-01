@@ -66,6 +66,7 @@ function parseShopeeCSV(text) {
     waktuKlik:      col('Waktu Klik'),          // Shopee-tracked click time
     toko:           col('Nama Toko'),
     barang:         col('Nama Barang') !== -1 ? col('Nama Barang') : col('Nama Barange'),
+    idBarang:       col('ID Barang'),
     kategori1:      col('L1 Kategori'),
     kategori2:      col('L2 Kategori'),
     harga:          col('Harga(Rp)'),
@@ -117,6 +118,7 @@ function parseShopeeCSV(text) {
       orderHour,        // jam order (dari Waktu Pemesanan)
       toko:             get(CI.toko),
       barang:           get(CI.barang),
+      idBarang:         get(CI.idBarang),
       kategori1:        get(CI.kategori1),
       kategori2:        get(CI.kategori2),
       harga:            parseNum(get(CI.harga)),
