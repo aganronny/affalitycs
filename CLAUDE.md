@@ -93,6 +93,7 @@ Fitur v3.3 (per Ad / Ad Set):
 - Satu campaign bisa >1 adset & ad, masing-masing tag berbeda — tabel per-ad menjawab "ad/adset mana yang jualan"
 - File ad-level juga ikut agregat campaign (jumlah ad-nya = total campaign) lewat `_fromBreakdown` marker; kalau campur dengan file campaign level, campaign level yang menang (resolveFbCampaignRows)
 - `fbLinkClicksOf` = helper shared fallback `Results` (actions:link_click) — dipakai extractFbRows & extractFbAdRows
+- **File ad-level tanpa kolom "Campaign name"** (export Ads + Breakdown Age/Gender): agregat campaign **disintesis dari baris ad** (`synthesizeCampaignRowsFromAds` — jumlah per ad per tanggal = total campaign). Warning khusus zero-trace: ad yang spend/klik FB > 0 tapi nol klik & order Shopee dengan tag-nya → 🚨 "budget bocor, cek link/tag" (beda dari warning naming konvensi)
 
 Fitur v2.9 (range picker):
 - **Filter tanggal 1 tombol**: klik → dropdown berisi preset sekali-klik (Hari terakhir / 7 hari / 30 hari / Semua data — anchor-nya tanggal data terakhir, bukan hari ini) + kalender mini (mulai Senin). Klik awal → klik akhir → otomatis apply
