@@ -464,6 +464,28 @@ function extractFbAdRows(raw) {
   return out;
 }
 
+// Kalau file ad-level gak punya kolom "Campaign name", agregat campaign
+// disintesis dari baris ad (jumlah semua ad = total campaign).
+function synthesizeCampaignRowsFromAds(adsRows) {
+  const groups = new Map();
+  adsRows.forEach(a => {
+    const key = (a.campaignName || a.adName) + '|' + (a.date || '');
+    if (!groups.has(key)) groups.set(key, { campaignName: a.campaignName || a.adName, date: a.date || '', spent: 0, reach: 0, impressions: 0, linkClicks: 0, landingPageViews: 0 });
+    const g = groups.get(key);
+    g.spent += a.spent || 0;
+    g.reach += a.reach || 0;
+    g.impressions += a.impressions || 0;
+    g.linkClicks += a.linkClicks || 0;
+    g.landingPageViews += a.landingPageViews || 0;
+  });
+  return [...groups.values()].map(g => ({
+    date: g.date, endDate: '', campaignName: g.campaignName,
+    spent: g.spent, reach: g.reach, impressions: g.impressions,
+    linkClicks: g.linkClicks, allClicks: 0, cpc: 0, cpm: 0, ctr: 0,
+    landingPageViews: g.landingPageViews, budget: 0, delivery: '',
+  }));
+}
+
 // --- RESOLVE SHOPEE KEY -----------------------------------------
 function resolveShopeeKey(row, fbNameSet, mapping) {
   const tag1 = (row.tag1 || '').trim();
@@ -507,6 +529,7 @@ if (typeof module !== 'undefined' && module.exports) {
     FB_AGE_ORDER, normalizeFbGender, extractFbBreakdown, parseFbBreakdownCSV, parseFbBreakdownXLSX,
     resolveFbCampaignRows,
     extractFbAdRows,
+    synthesizeCampaignRowsFromAds,
     resolveShopeeKey, resolveClickKey,
   };
 }

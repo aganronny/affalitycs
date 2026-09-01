@@ -337,9 +337,11 @@ async function runAnalysis() {
         raw = fbRawFromXLSX(await readAsArrayBuffer(f));
       }
       // Satu file FB dipakai tiga arah: agregat campaign + breakdown + per-ad (kalau ada kolomnya)
-      const bd = extractFbBreakdown(raw);
       const ads = extractFbAdRows(raw);
-      const camps = extractFbRows(raw);
+      let camps = extractFbRows(raw);
+      // file ad-level tanpa kolom "Campaign name" → agregat campaign disintesis dari ad
+      if (camps.length === 0 && ads.length > 0) camps = synthesizeCampaignRowsFromAds(ads);
+      const bd = extractFbBreakdown(raw);
       // file ad-level & breakdown = sumber multi-baris per campaign (sah)
       camps.forEach(r => { r._fileIdx = fbFileIdx; r._fromBreakdown = bd.length > 0 || ads.length > 0; });
       state.fbCampaigns.push(...camps);
@@ -1665,7 +1667,12 @@ function computeAdRows() {
   });
   // ad dengan ROAS dulu (keputusan), tanpa data menyusul
   rows.sort((a, b) => (b.roas ?? -1) - (a.roas ?? -1));
-  state._adMatchStats = { unmatched: rows.filter(r => !r.matched).map(r => r.adName) };
+  state._adMatchStats = {
+    unmatched: rows.filter(r => !r.matched).map(r => r.adName),
+    // zero-trace = jalan (ada spend/klik FB) tapi nol jejak Shopee → alarm link/tag
+    zeroTrace: rows.filter(r => !r.matched && (r.spent > 0 || r.linkClicks > 0))
+      .map(r => ({ name: r.adName, spent: r.spent, clicks: r.linkClicks })),
+  };
   return rows;
 }
 
@@ -1752,10 +1759,15 @@ function renderSanity() {
       });
   }
 
-  // 2b. Ad yang gak punya tag di namanya — order-nya gak bisa diatribusi
-  //     (ad yang tag-nya ada di click report tapi belum jualan TIDAK masuk sini)
+  // 2b. Ad yang jalan tapi NOL jejak Shopee -> alarm link/tag bocor
   const adStats = state._adMatchStats;
-  if (adStats && adStats.unmatched.length > 0) {
+  if (adStats && adStats.zeroTrace.length > 0) {
+    const z = adStats.zeroTrace[0];
+    warns.push({ type: 'warn', icon: '🚨',
+      text: `<strong>${adStats.zeroTrace.length} ad spending tapi NOL jejak Shopee</strong> — contoh: <strong>${esc(z.name)}</strong> (spend Rp ${fmt(z.spent)}, ${fmt(z.clicks)} klik FB, tapi 0 klik & 0 order Shopee dengan tag itu). Cek apakah link/tag di ad masih hidup & benar — jangan biarkan budget bocor.` });
+  }
+  // 2c. Ad tanpa tag sama sekali (naming) — hanya kalau bukan kasus zero-trace
+  if (adStats && adStats.unmatched.length > 0 && adStats.zeroTrace.length === 0) {
     warns.push({ type: 'warn', icon: '🏷️',
       text: `<strong>${adStats.unmatched.length} ad gak punya tag yang dikenali di namanya</strong> (contoh: <strong>${esc(adStats.unmatched[0])}</strong>) — sales dari ad ini gak bisa dihitung. Pakai naming convention: taruh tag (mis. gacoan01) di nama ad, lalu export ulang level Ad.` });
   }

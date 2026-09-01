@@ -260,5 +260,27 @@ t("baris tanggal/total dibuang (bukan ad)", () => {
   const csv = '"Reporting starts","Campaign name","Ad name","Amount spent (IDR)"\n"2026-08-28","2026-08-28","2026-08-28","100"\n';
   assert.strictEqual(P.extractFbAdRows(P.fbRawFromCSV(csv)).length, 0);
 });
+t("file ad-level TANPA kolom Campaign name → agregat disintesis dari ad", () => {
+  const csv = '"Reporting starts","Ad name","Amount spent (IDR)","Results","Result indicator"\n' +
+    '"2026-08-28","cp-a","300","3","actions:link_click"\n' +
+    '"2026-08-28","cp-a","200","2","actions:link_click"\n' +
+    '"2026-08-29","cp-a","100","1","actions:link_click"\n';
+  const ads = P.extractFbAdRows(P.fbRawFromCSV(csv));
+  const syn = P.synthesizeCampaignRowsFromAds(ads);
+  assert.strictEqual(syn.length, 2); // 2 tanggal
+  const d28 = syn.find(s => s.date === '2026-08-28');
+  assert.strictEqual(d28.campaignName, 'cp-a');
+  assert.strictEqual(d28.spent, 500);
+  assert.strictEqual(d28.linkClicks, 5);
+});
+t("ad dengan Campaign name → sintesis pakai campaign, bukan ad", () => {
+  const csv = '"Reporting starts","Campaign name","Ad name","Amount spent (IDR)","Results","Result indicator"\n' +
+    '"2026-08-28","kampA","ad-x","300","3","actions:link_click"\n' +
+    '"2026-08-28","kampA","ad-y","200","2","actions:link_click"\n';
+  const syn = P.synthesizeCampaignRowsFromAds(P.extractFbAdRows(P.fbRawFromCSV(csv)));
+  assert.strictEqual(syn.length, 1);
+  assert.strictEqual(syn[0].campaignName, 'kampA');
+  assert.strictEqual(syn[0].spent, 500);
+});
 
 console.log(`\nALL TESTS PASSED (${passed} kasus)`);
