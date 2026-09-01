@@ -1559,7 +1559,7 @@ function renderClickInsights() {
     geoWrap.innerHTML = '<div class="chart-empty">Unggah Shopee Click Report untuk melihat distribusi negara.</div>';
   }
 
-  // Klik vs Order per jam (00-23) — bandingin jam klik iklan vs jam order masuk
+  // Klik vs Order per jam (00-23) — bandingkan jam klik iklan vs jam order masuk
   const byHour = Array(24).fill(0);
   state.filteredClicks.forEach(c => {
     const h = parseInt((c.waktuKlik || '').slice(11, 13), 10);
