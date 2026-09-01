@@ -1614,17 +1614,29 @@ function computeAdRows() {
     if (isCountableOrder(r)) salesByTag[tag].orders.add(r.orderId);
     salesByTag[tag].komisi += r.komisiBersih;
   });
-  const tags = Object.keys(salesByTag);
+  // tag dari click report juga dihitung kandidat — ad yang tag-nya hidup di click
+  // report tapi belum jualan tetap terhubung (order '-'), bukan dicap gak dikenali
+  const clickTags = new Set();
+  state.filteredClicks.forEach(c => { if (c.tag1) clickTags.add(c.tag1); });
+  const allTags = [...new Set([...Object.keys(salesByTag), ...clickTags])];
+
+  // matching toleran: cek apa adanya dulu, lalu versi ternormalisasi (spasi/strip/dot diabaikan)
   const tagForAd = (adName) => {
     const lower = String(adName || '').toLowerCase();
+    const nAd = normalizeName(adName);
     let best = null;
-    for (const t of tags) {
+    for (const t of allTags) {
       const lt = t.toLowerCase();
+      const nT = normalizeName(t);
+      if (!nT) continue;
+      let hit = false;
       const i = lower.indexOf(lt);
-      if (i < 0) continue;
-      // guard 'gacoan010' tidak boleh match 'gacoan01': huruf/angka nempel setelah tag = bukan
-      if (/[a-z0-9]/.test(lower.charAt(i + lt.length))) continue;
-      if (!best || lt.length > best.length) best = t;
+      if (i >= 0 && !/[a-z0-9]/.test(lower.charAt(i + lt.length))) hit = true;
+      if (!hit) {
+        const j = nAd.indexOf(nT);
+        if (j >= 0 && !/[a-z0-9]/.test(nAd.charAt(j + nT.length))) hit = true;
+      }
+      if (hit && (!best || lt.length > best.length)) best = t;
     }
     return best;
   };
@@ -1666,6 +1678,11 @@ function renderAdsTable() {
     return;
   }
   card.style.display = 'block';
+  const title = card.querySelector('.table-title');
+  if (title) {
+    const matched = rows.filter(r => r.matched).length;
+    title.innerHTML = `📋 Detail per Ad / Ad Set <span class="chart-hint">(${rows.length} ad · ${matched} terhubung tag · tag di nama ad → sales per ad)</span>`;
+  }
   tbody.innerHTML = rows.map(r => {
     const roasTxt = r.roas !== null ? r.roas.toFixed(2) + 'x' : '-';
     return `<tr>
@@ -1734,6 +1751,7 @@ function renderSanity() {
   }
 
   // 2b. Ad yang gak punya tag di namanya — order-nya gak bisa diatribusi
+  //     (ad yang tag-nya ada di click report tapi belum jualan TIDAK masuk sini)
   const adStats = state._adMatchStats;
   if (adStats && adStats.unmatched.length > 0) {
     warns.push({ type: 'warn', icon: '🏷️',
