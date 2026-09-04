@@ -1633,12 +1633,33 @@ function renderFunnelSummary(campaigns, masterRows) {
           ]
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: {
-            legend: { position: 'top' },
-            datalabels: { display: true, anchor: 'end', align: 'end', color: dlColor(), font: { size: 9, weight: 600 }, formatter: v => v ? fmt(v) : '' }
+          responsive: true,
+          maintainAspectRatio: false,
+          layout: {
+            padding: { top: 18, bottom: 4, left: 4, right: 4 }
           },
-          scales: { y: { beginAtZero: true, title: { display: true, text: 'Jumlah' } } }
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: { usePointStyle: true, boxWidth: 10, padding: 14, font: { size: 11, weight: '600' } }
+            },
+            datalabels: {
+              display: true,
+              anchor: 'end',
+              align: 'top',
+              offset: 2,
+              color: dlColor(),
+              font: { size: 9.5, weight: 600 },
+              formatter: v => v ? fmt(v) : ''
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grace: '15%',
+              title: { display: true, text: 'Jumlah' }
+            }
+          }
         }
       });
     }
@@ -1660,28 +1681,69 @@ function renderRoasBarChart(campaigns) {
   const labels   = targetCampaigns.map(c => c.name);
   const roasVals = targetCampaigns.map(c => c.roas !== null ? +c.roas.toFixed(2) : 0);
   const colors   = roasVals.map(v => v >= 2 ? '#10b981' : v >= 1 ? '#f59e0b' : '#ef4444');
+
+  const maxRoas = roasVals.length > 0 ? Math.max(1, ...roasVals) : 1;
+  // Headroom minimal 35% di atas bar tertinggi agar angka datalabel bebas dari benturan
+  const suggestedMaxY = Math.max(1.6, Math.ceil(maxRoas * 1.35 * 10) / 10);
+
   state.charts['roas'] = new Chart(canvas, {
     type: 'bar',
     data: {
       labels,
       datasets: [
-        { label: 'ROAS', data: roasVals, backgroundColor: colors, borderRadius: 6 },
+        { label: 'ROAS Campaign', data: roasVals, backgroundColor: colors, borderRadius: 6 },
         { label: 'Break-even (1x)', data: labels.map(() => 1), type: 'line',
           borderColor: '#94a3b8', borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false,
           datalabels: { display: false } }
       ]
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'top' },
-        tooltip: { callbacks: {
-          label: (ctx) => ctx.dataset.label === 'ROAS' ? `ROAS: ${ctx.raw}x` : 'Break-even'
-        }},
-        datalabels: { display: true, anchor: 'end', align: 'end', offset: -2, color: dlColor(),
-          font: { weight: 700, size: 10 }, formatter: (v) => v ? v.toFixed(2) + 'x' : '' }
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: {
+          top: 18,
+          bottom: 4,
+          left: 4,
+          right: 4
+        }
       },
-      scales: { y: { beginAtZero: true, suggestedMax: 1.2, title: { display: true, text: 'ROAS (x)' } } }
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {
+            usePointStyle: true,
+            boxWidth: 10,
+            padding: 16,
+            font: { family: "var(--font), system-ui, sans-serif", size: 11.5, weight: '600' }
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.dataset.label.includes('Break-even') ? 'Break-even: 1.00x' : `ROAS: ${ctx.raw}x`
+          }
+        },
+        datalabels: {
+          display: true,
+          anchor: 'end',
+          align: 'top',
+          offset: 2,
+          color: dlColor(),
+          font: { weight: 700, size: 10.5 },
+          formatter: (v) => v ? v.toFixed(2) + 'x' : '0.00x'
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          suggestedMax: suggestedMaxY,
+          grace: '15%',
+          title: { display: true, text: 'ROAS (x)' },
+          ticks: {
+            callback: (v) => v + 'x'
+          }
+        }
+      }
     }
   });
 }
@@ -2280,13 +2342,33 @@ function renderRoasJourney() {
       ]
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: (ctx) => {
-        if (ctx.datasetIndex !== 0) return 'Break-even';
-        const h = hist[ctx.dataIndex];
-        return [`ROAS: ${h.roas.toFixed(2)}x`, `Spend: Rp${fmtK(h.spent)}`, `Komisi: Rp${fmtK(h.komisi)}`, `Orders: ${h.orders}`];
-      } } } },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => parseFloat(v).toFixed(1) + 'x' } } }
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: { top: 16, bottom: 4, left: 4, right: 4 }
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true, boxWidth: 10, padding: 14, font: { size: 11.5, weight: '600' } }
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              if (ctx.datasetIndex !== 0) return 'Break-even';
+              const h = hist[ctx.dataIndex];
+              return [`ROAS: ${h.roas.toFixed(2)}x`, `Spend: Rp${fmtK(h.spent)}`, `Komisi: Rp${fmtK(h.komisi)}`, `Orders: ${h.orders}`];
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          grace: '15%',
+          ticks: { callback: v => parseFloat(v).toFixed(1) + 'x' }
+        }
+      }
     }
   });
 }
