@@ -602,6 +602,137 @@ function resolveShopeeKey(row, fbNameSet, mapping) {
   return { key: '(tidak ada tag)', source: 'none' };
 }
 
+/**
+ * Alokasi atribut penjualan & klik Shopee ke baris Iklan Facebook (level Ad).
+ * Mencegah komisi/pesanan terhitung ganda (duplikasi) ketika beberapa iklan
+ * berada dalam 1 campaign atau 1 ad set yang sama.
+ *
+ * Prioritas pencocokan key:
+ * 1. adName (paling spesifik)
+ * 2. adSetName (jika tidak cocok adName)
+ * 3. campaignName (jika tidak cocok adName maupun adSetName)
+ * 4. Unbound (tidak cocok FB manapun -> baris organik)
+ *
+ * Bila 1 key cocok ke beberapa iklan (misal tag berupa nama campaign):
+ * - Komisi & GMV didistribusikan secara proporsional berdasarkan spend iklan.
+ * - Pesanan didistribusikan secara proporsional.
+ * - Sisa selisih pembulatan diberikan ke iklan terakhir agar total matematis 100% cocok.
+ */
+function allocateAdAttribution(ads, salesByKey = {}, clicksByKey = {}) {
+  const adRows = ads.map(a => ({
+    ...a,
+    allocatedKomisi: 0,
+    allocatedGmv: 0,
+    allocatedOrders: 0,
+    allocatedClicks: 0,
+    hasClickData: false,
+  }));
+
+  const boundKeys = new Set();
+
+  // 1. Alokasi Penjualan (Shopee)
+  for (const [key, sale] of Object.entries(salesByKey)) {
+    if (!sale) continue;
+    const numOrders = sale.orders instanceof Set ? sale.orders.size : (sale.orders || 0);
+    const komisi = sale.komisi || 0;
+    const gmv = sale.gmv || 0;
+    if (numOrders === 0 && komisi === 0 && gmv === 0) continue;
+
+    // Cari iklan yang cocok berdasarkan prioritas
+    let matches = adRows.filter(a => a.adName === key);
+    if (matches.length === 0) {
+      matches = adRows.filter(a => a.adSetName && a.adSetName !== '-' && a.adSetName === key);
+    }
+    if (matches.length === 0) {
+      matches = adRows.filter(a => a.campaignName && a.campaignName !== '-' && a.campaignName === key);
+    }
+
+    if (matches.length > 0) {
+      boundKeys.add(key);
+      if (matches.length === 1) {
+        matches[0].allocatedKomisi += komisi;
+        matches[0].allocatedGmv += gmv;
+        matches[0].allocatedOrders += numOrders;
+      } else {
+        const totalSpent = matches.reduce((s, a) => s + (a.spent || 0), 0);
+        let remKomisi = komisi;
+        let remGmv = gmv;
+        let remOrders = numOrders;
+
+        matches.forEach((m, idx) => {
+          const isLast = (idx === matches.length - 1);
+          const ratio = totalSpent > 0 ? (m.spent / totalSpent) : (1 / matches.length);
+
+          if (isLast) {
+            m.allocatedKomisi += remKomisi;
+            m.allocatedGmv += remGmv;
+            m.allocatedOrders += remOrders;
+          } else {
+            const shareKomisi = komisi * ratio;
+            const shareGmv = gmv * ratio;
+            const shareOrders = Math.round(numOrders * ratio);
+
+            m.allocatedKomisi += shareKomisi;
+            m.allocatedGmv += shareGmv;
+            m.allocatedOrders += shareOrders;
+
+            remKomisi -= shareKomisi;
+            remGmv -= shareGmv;
+            remOrders -= shareOrders;
+          }
+        });
+      }
+    }
+  }
+
+  // 2. Alokasi Klik Shopee (Click Report)
+  const unboundClicks = {};
+  for (const [key, cData] of Object.entries(clicksByKey)) {
+    if (!cData || !cData.total) continue;
+    const clicks = cData.total;
+
+    let matches = adRows.filter(a => a.adName === key);
+    if (matches.length === 0) {
+      matches = adRows.filter(a => a.adSetName && a.adSetName !== '-' && a.adSetName === key);
+    }
+    if (matches.length === 0) {
+      matches = adRows.filter(a => a.campaignName && a.campaignName !== '-' && a.campaignName === key);
+    }
+
+    if (matches.length > 0) {
+      boundKeys.add(key);
+      if (matches.length === 1) {
+        matches[0].allocatedClicks += clicks;
+        matches[0].hasClickData = true;
+      } else {
+        const totalLinkClicks = matches.reduce((s, a) => s + (a.linkClicks || 0), 0);
+        const totalSpent = matches.reduce((s, a) => s + (a.spent || 0), 0);
+        let remClicks = clicks;
+
+        matches.forEach((m, idx) => {
+          m.hasClickData = true;
+          const isLast = (idx === matches.length - 1);
+          const ratio = totalLinkClicks > 0
+            ? (m.linkClicks / totalLinkClicks)
+            : (totalSpent > 0 ? (m.spent / totalSpent) : (1 / matches.length));
+
+          if (isLast) {
+            m.allocatedClicks += remClicks;
+          } else {
+            const shareClicks = Math.round(clicks * ratio);
+            m.allocatedClicks += shareClicks;
+            remClicks -= shareClicks;
+          }
+        });
+      }
+    } else {
+      unboundClicks[key] = clicks;
+    }
+  }
+
+  return { adRows, boundKeys, unboundClicks };
+}
+
 // --- NODE EXPORT (untuk unit test) ------------------------------
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -613,5 +744,7 @@ if (typeof module !== 'undefined' && module.exports) {
     extractFbAdRows,
     synthesizeCampaignRowsFromAds,
     resolveShopeeKey, resolveClickKey,
+    allocateAdAttribution,
   };
 }
+

@@ -337,4 +337,56 @@ t("sintesis membawa endDate terjauh dari Reporting ends", () => {
   assert.strictEqual(syn[0].endDate, '2026-08-31');
 });
 
+// ---------- allocateAdAttribution (Anti-duplikasi & proporsional) ----------
+console.log('allocateAdAttribution');
+t("mencegah duplikasi komisi ketika beberapa ad berada dalam campaign yang sama", () => {
+  const ads = [
+    { adName: 'ad-1', adSetName: 'set-1', campaignName: 'camp-pamper', spent: 200, linkClicks: 10, landingPageViews: 8 },
+    { adName: 'ad-2', adSetName: 'set-1', campaignName: 'camp-pamper', spent: 800, linkClicks: 40, landingPageViews: 32 },
+  ];
+  const salesByKey = {
+    'camp-pamper': { orders: new Set(['ORD1', 'ORD2', 'ORD3', 'ORD4', 'ORD5']), komisi: 100000, gmv: 1000000 }
+  };
+  const clicksByKey = {
+    'camp-pamper': { total: 50, fromFacebook: 40 }
+  };
+
+  const { adRows, boundKeys, unboundClicks } = P.allocateAdAttribution(ads, salesByKey, clicksByKey);
+
+  // Total komisi harus tepat 100000 (tidak menjadi 200000!)
+  const totalKomisi = adRows.reduce((s, a) => s + a.allocatedKomisi, 0);
+  assert.strictEqual(totalKomisi, 100000);
+
+  // Ad-1 (spend 20%) dapat 20000, Ad-2 (spend 80%) dapat 80000
+  assert.strictEqual(adRows[0].allocatedKomisi, 20000);
+  assert.strictEqual(adRows[1].allocatedKomisi, 80000);
+
+  // Total pesanan harus tepat 5
+  const totalOrders = adRows.reduce((s, a) => s + a.allocatedOrders, 0);
+  assert.strictEqual(totalOrders, 5);
+
+  // Total klik terdistribusi tepat 50 (10 ke ad-1, 40 ke ad-2 berdasarkan linkClicks)
+  const totalClicks = adRows.reduce((s, a) => s + a.allocatedClicks, 0);
+  assert.strictEqual(totalClicks, 50);
+  assert.strictEqual(adRows[0].allocatedClicks, 10);
+  assert.strictEqual(adRows[1].allocatedClicks, 40);
+
+  assert.strictEqual(boundKeys.has('camp-pamper'), true);
+});
+
+t("prioritas pencocokan: adName lebih diprioritaskan daripada campaignName", () => {
+  const ads = [
+    { adName: 'spesifik-ad', adSetName: 'set-a', campaignName: 'camp-a', spent: 500, linkClicks: 20 },
+    { adName: 'lain-ad', adSetName: 'set-a', campaignName: 'camp-a', spent: 500, linkClicks: 20 },
+  ];
+  const salesByKey = {
+    'spesifik-ad': { orders: new Set(['ORD1']), komisi: 50000, gmv: 500000 }
+  };
+
+  const { adRows } = P.allocateAdAttribution(ads, salesByKey, {});
+  assert.strictEqual(adRows[0].allocatedKomisi, 50000);
+  assert.strictEqual(adRows[1].allocatedKomisi, 0);
+});
+
 console.log(`\nALL TESTS PASSED (${passed} kasus)`);
+

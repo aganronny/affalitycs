@@ -1055,8 +1055,16 @@ function renderSmartReport() {
   if (campaigns.length === 0) { el.style.display = 'none'; return; }
   el.style.display = 'flex';
 
-  const totalSpent = campaigns.reduce((s, c) => s + c.spent, 0);
-  const totalKomisi = campaigns.reduce((s, c) => s + c.komisi, 0);
+  const feeRatio = getTaxFeeRatio();
+  const countableRows = (state.filteredShopee || []).filter(isCountableOrder);
+  const totalKomisi = Math.round(countableRows.reduce((s, r) => s + (r.komisiBersih || 0), 0));
+  let rawSpend = 0;
+  if (state.filteredFbAds && state.filteredFbAds.length > 0) {
+    rawSpend = state.filteredFbAds.reduce((s, a) => s + (a.spent || 0), 0);
+  } else if (state.filteredFb && state.filteredFb.length > 0) {
+    rawSpend = state.filteredFb.reduce((s, c) => s + (c.spent || 0), 0) * (state.dateRatio || 1);
+  }
+  const totalSpent = Math.round(rawSpend * feeRatio);
   const profit = totalKomisi - totalSpent;
   el.style.borderLeftColor = totalSpent === 0 ? '' : (profit >= 0 ? '#10b981' : '#ef4444');
   const roas = totalSpent > 0 ? totalKomisi / totalSpent : null;
@@ -1329,26 +1337,18 @@ function computeMasterTableRows() {
       if (a.delivery) byAd[k].delivery = a.delivery;
     });
 
-    const boundKeys = new Set();
-    const rows = Object.values(byAd).map(a => {
-      boundKeys.add(a.adName);
-      if (a.adSetName && a.adSetName !== '-') boundKeys.add(a.adSetName);
-      if (a.campaignName && a.campaignName !== '-') boundKeys.add(a.campaignName);
+    const adList = Object.values(byAd);
+    const { adRows, boundKeys, unboundClicks } = allocateAdAttribution(adList, salesByKey, clicksByKey);
 
-      const sale = salesByKey[a.adName] || 
-        (a.adSetName && a.adSetName !== '-' ? salesByKey[a.adSetName] : null) || 
-        (a.campaignName && a.campaignName !== '-' ? salesByKey[a.campaignName] : null) || null;
-      const orders = sale ? sale.orders.size : 0;
-      const komisi = sale ? Math.round(sale.komisi) : 0;
+    const rows = adRows.map(a => {
+      const orders = Math.round(a.allocatedOrders || 0);
+      const komisi = Math.round(a.allocatedKomisi || 0);
       const spent = Math.round(a.spent * feeRatio);
       const profit = Math.round(komisi - spent);
       const roas = spent > 0 ? (komisi / spent) : null;
       const cpo = (spent > 0 && orders > 0) ? Math.round(spent / orders) : null;
 
-      const cData = clicksByKey[a.adName] || 
-        (a.adSetName && a.adSetName !== '-' ? clicksByKey[a.adSetName] : null) || 
-        (a.campaignName && a.campaignName !== '-' ? clicksByKey[a.campaignName] : null) || null;
-      const shopeeClicks = cData ? cData.total : a.landingPageViews;
+      const shopeeClicks = a.hasClickData ? Math.round(a.allocatedClicks) : a.landingPageViews;
       const dropPct = (a.linkClicks > 0 && shopeeClicks !== null)
         ? Math.max(0, ((a.linkClicks - shopeeClicks) / a.linkClicks * 100))
         : null;
@@ -1381,10 +1381,9 @@ function computeMasterTableRows() {
     allUnbound.forEach(tag => {
       if (!boundKeys.has(tag)) {
         const sale = salesByKey[tag] || null;
-        const orders = sale ? sale.orders.size : 0;
+        const orders = sale ? (sale.orders instanceof Set ? sale.orders.size : (sale.orders || 0)) : 0;
         const komisi = sale ? Math.round(sale.komisi) : 0;
-        const cData = clicksByKey[tag] || null;
-        const shopeeClicks = cData ? cData.total : 0;
+        const shopeeClicks = unboundClicks[tag] || 0;
         if (orders > 0 || komisi > 0) {
           rows.push({
             campaignDisplay: 'Organik / Tanpa Iklan FB',
@@ -2439,8 +2438,16 @@ function exportExcel() {
     const wb = XLSX.utils.book_new();
 
     // Ringkasan
-    const totalSpent = camps.reduce((s, c) => s + c.spent, 0);
-    const totalKomisi = camps.reduce((s, c) => s + c.komisi, 0);
+    const feeRatio = getTaxFeeRatio();
+    const countableRows = (state.filteredShopee || []).filter(isCountableOrder);
+    const totalKomisi = Math.round(countableRows.reduce((s, r) => s + (r.komisiBersih || 0), 0));
+    let rawSpend = 0;
+    if (state.filteredFbAds && state.filteredFbAds.length > 0) {
+      rawSpend = state.filteredFbAds.reduce((s, a) => s + (a.spent || 0), 0);
+    } else if (state.filteredFb && state.filteredFb.length > 0) {
+      rawSpend = state.filteredFb.reduce((s, c) => s + (c.spent || 0), 0) * (state.dateRatio || 1);
+    }
+    const totalSpent = Math.round(rawSpend * feeRatio);
     const st = computeStatusRows();
     const cair = st.filter(s => /selesai/i.test(s.status)).reduce((s, r) => s + r.komisi, 0);
     const pending = st.filter(s => /tertu|belum dibayar/i.test(s.status)).reduce((s, r) => s + r.komisi, 0);
@@ -2673,14 +2680,23 @@ function showToast(msg) {
 
 function copyWaSummary() {
   const feePct = getTaxFeePct();
-  const masterRows = computeMasterTableRows();
-  const sumSpent = masterRows.reduce((s, r) => s + (r.spent || 0), 0);
-  const sumFbKlik = masterRows.reduce((s, r) => s + (r.linkClicks || 0), 0);
-  const sumShopeeKlik = masterRows.reduce((s, r) => s + (r.shopeeClicks || 0), 0);
-  const sumOrders = masterRows.reduce((s, r) => s + (r.orders || 0), 0);
-  const sumKomisi = masterRows.reduce((s, r) => s + (r.komisi || 0), 0);
+  const feeRatio = getTaxFeeRatio();
+  const countableRows = (state.filteredShopee || []).filter(isCountableOrder);
+  const sumKomisi = Math.round(countableRows.reduce((s, r) => s + (r.komisiBersih || 0), 0));
+  let rawSpend = 0;
+  if (state.filteredFbAds && state.filteredFbAds.length > 0) {
+    rawSpend = state.filteredFbAds.reduce((s, a) => s + (a.spent || 0), 0);
+  } else if (state.filteredFb && state.filteredFb.length > 0) {
+    rawSpend = state.filteredFb.reduce((s, c) => s + (c.spent || 0), 0) * (state.dateRatio || 1);
+  }
+  const sumSpent = Math.round(rawSpend * feeRatio);
   const sumProfit = sumKomisi - sumSpent;
   const roas = sumSpent > 0 ? (sumKomisi / sumSpent) : null;
+  const sumOrders = new Set(countableRows.map(r => r.orderId)).size;
+
+  const masterRows = computeMasterTableRows();
+  const sumFbKlik = masterRows.reduce((s, r) => s + (r.linkClicks || 0), 0);
+  const sumShopeeKlik = masterRows.reduce((s, r) => s + (r.shopeeClicks || 0), 0);
   const cpo = (sumSpent > 0 && sumOrders > 0) ? Math.round(sumSpent / sumOrders) : null;
   const dropPct = sumFbKlik > 0 ? Math.max(0, ((sumFbKlik - sumShopeeKlik) / sumFbKlik * 100)) : 0;
 
