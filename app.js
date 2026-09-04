@@ -1372,28 +1372,39 @@ function renderFunnelSummary(campaigns, masterRows) {
   const ctxLoss = document.getElementById('chart-click-loss');
   if (!clSummary) return;
 
-  const withFb = (masterRows && masterRows.length > 0)
-    ? masterRows.filter(r => r.spent > 0 || r.linkClicks > 0)
-    : campaigns.filter(c => c.fb && c.fbLinkClicks > 0);
+  const rows = (masterRows && masterRows.length > 0) ? masterRows : campaigns;
+  if (!rows || rows.length === 0) {
+    clSummary.style.display = 'none';
+    if (ctxLoss) ctxLoss.innerHTML = '';
+    return;
+  }
 
-  if (withFb.length > 0) {
-    const totalSpent     = withFb.reduce((s, r) => s + (r.spent || 0), 0);
-    const totalFbClicks  = withFb.reduce((s, r) => s + (r.linkClicks || r.fbLinkClicks || 0), 0);
-    const totalShopeeClk = withFb.reduce((s, r) => s + (r.shopeeClicks || r.stage2Value || 0), 0);
-    const totalFbOrders  = withFb.reduce((s, r) => s + (r.orders || 0), 0);
-    const totalAllOrders = (masterRows && masterRows.length > 0)
-      ? masterRows.reduce((s, r) => s + (r.orders || 0), 0)
-      : campaigns.reduce((s, c) => s + (c.orders || 0), 0);
-    const organicOrders  = Math.max(0, totalAllOrders - totalFbOrders);
+  // Sumber kebenaran corong: seluruh baris kampanye/iklan terfilter
+  const totalSpent     = rows.reduce((s, r) => s + (r.spent || 0), 0);
+  const totalFbClicks  = rows.reduce((s, r) => s + (r.linkClicks || r.fbLinkClicks || 0), 0);
+  const totalShopeeClk = rows.reduce((s, r) => s + (r.shopeeClicks || r.stage2Value || 0), 0);
+  
+  // Total order valid unik (sinkron 100% dengan Kartu KPI dan Master Table)
+  const countableShopee = (state.filteredShopee || []).filter(r => isCountableOrder(r));
+  const exactShopeeOrders = countableShopee.length > 0
+    ? new Set(countableShopee.map(r => r.orderId)).size
+    : 0;
+  const totalOrders    = exactShopeeOrders > 0 ? exactShopeeOrders : rows.reduce((s, r) => s + (r.orders || 0), 0);
 
+  // Pisahkan teratribusi iklan vs organik untuk info tambahan (jika ada)
+  const fbRows = rows.filter(r => (r.spent > 0 || r.linkClicks > 0) && r.delivery !== 'organic');
+  const fbOrders = fbRows.reduce((s, r) => s + (r.orders || 0), 0);
+  const organicOrders = Math.max(0, totalOrders - fbOrders);
+
+  if (totalFbClicks > 0 || totalShopeeClk > 0 || totalOrders > 0) {
     const dropStage1     = Math.max(0, totalFbClicks - totalShopeeClk);
     const dropStage1Pct  = totalFbClicks > 0 ? (dropStage1 / totalFbClicks * 100) : 0;
-    const shopeeCvr      = totalShopeeClk > 0 ? (totalFbOrders / totalShopeeClk * 100) : 0;
-    const overallConv    = totalFbClicks > 0 ? (totalFbOrders / totalFbClicks * 100) : 0;
+    const shopeeCvr      = totalShopeeClk > 0 ? (totalOrders / totalShopeeClk * 100) : 0;
+    const overallConv    = totalFbClicks > 0 ? (totalOrders / totalFbClicks * 100) : 0;
 
     const cpcFb          = (totalFbClicks > 0 && totalSpent > 0) ? Math.round(totalSpent / totalFbClicks) : null;
     const realCpc        = (totalShopeeClk > 0 && totalSpent > 0) ? Math.round(totalSpent / totalShopeeClk) : null;
-    const cpo            = (totalFbOrders > 0 && totalSpent > 0) ? Math.round(totalSpent / totalFbOrders) : null;
+    const cpo            = (totalOrders > 0 && totalSpent > 0) ? Math.round(totalSpent / totalOrders) : null;
 
     const cpcFbTxt       = cpcFb !== null ? 'Rp ' + fmt(cpcFb) : '-';
     const realCpcTxt     = realCpc !== null ? 'Rp ' + fmt(realCpc) : '-';
@@ -1444,20 +1455,20 @@ function renderFunnelSummary(campaigns, masterRows) {
         <div class="connector-arrow">➔</div>
         <div class="connector-pill pill-cvr">
           <div class="pill-top">🛒 Shopee CVR ${shopeeCvr.toFixed(2)}%</div>
-          <div class="pill-mid"><strong>${fmt(totalFbOrders)}</strong> pesanan dari <strong>${fmt(totalShopeeClk)}</strong> pengunjung</div>
-          <div class="pill-bot">rasio order per pengunjung Shopee</div>
+          <div class="pill-mid"><strong>${fmt(totalOrders)}</strong> pesanan dari <strong>${fmt(totalShopeeClk)}</strong> pengunjung</div>
+          <div class="pill-bot">rasio pesanan per pengunjung Shopee</div>
         </div>
       </div>
 
       <div class="funnel-step step-order">
         <div class="funnel-step-header">
           <span class="funnel-step-badge badge-order">Tahap 3</span>
-          <span class="funnel-cost-tag">CPO Iklan: ${cpoTxt}</span>
+          <span class="funnel-cost-tag">CPO: ${cpoTxt}</span>
         </div>
-        <div class="funnel-step-title">Pesanan dari Iklan (FB)</div>
-        <div class="funnel-step-value" style="color:#10b981">${fmt(totalFbOrders)} <span style="font-size:13px;font-weight:500;color:var(--text-muted)">/ ${fmt(totalAllOrders)} total</span></div>
-        <div class="funnel-step-sub">Total CVR Iklan: <strong>${overallConv.toFixed(2)}%</strong> dari total klik FB</div>
-        ${organicOrders > 0 ? `<div style="font-size:11px;color:#10b981;margin-top:4px;font-weight:600;">+${fmt(organicOrders)} pesanan organik Shopee</div>` : ''}
+        <div class="funnel-step-title">Pesanan Masuk (Order)</div>
+        <div class="funnel-step-value" style="color:#10b981">${fmt(totalOrders)}</div>
+        <div class="funnel-step-sub">Total CVR: <strong>${overallConv.toFixed(2)}%</strong> dari total klik FB</div>
+        ${organicOrders > 0 ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${fmt(fbOrders)} dari iklan · ${fmt(organicOrders)} organik</div>` : ''}
       </div>
     `;
     clSummary.style.display = 'flex';
@@ -1465,7 +1476,7 @@ function renderFunnelSummary(campaigns, masterRows) {
     destroyChart('clickLoss');
     if (ctxLoss) {
       const canvas = ensureCanvas(ctxLoss);
-      const topItems = withFb.slice(0, 10);
+      const topItems = rows.filter(r => (r.spent > 0 || r.linkClicks > 0 || r.orders > 0)).slice(0, 10);
       const labels = topItems.map(r => (r.adDisplay && r.adDisplay !== '-') ? r.adDisplay : (r.campaignDisplay || r.name));
       const fbClicks = topItems.map(r => r.linkClicks || r.fbLinkClicks || 0);
       const spClicks = topItems.map(r => r.shopeeClicks || r.stage2Value || 0);
@@ -2597,7 +2608,7 @@ function loadDemoData() {
     { name: 'cp01', spent: 36796, reach: 7106, impressions: 7300,  linkClicks: 511, cpc: 72.0,  cpm: 5040.5, ctr: 7.0, budget: 25000 },
     { name: 'cp02', spent: 40592, reach: 7032, impressions: 7032,  linkClicks: 652, cpc: 62.3,  cpm: 5772.5, ctr: 9.3, budget: 25000 },
     { name: 'cp03', spent: 23148, reach: 6062, impressions: 6352,  linkClicks: 547, cpc: 42.3,  cpm: 3644.2, ctr: 8.6, budget: 25000 },
-    { name: 'cp04', spent: 0,     reach: 0,    impressions: 0,     linkClicks: 0,   cpc: 0,     cpm: 0,      ctr: 0,   budget: 25000 },
+    { name: 'cp04', spent: 19850, reach: 5200, impressions: 5400,  linkClicks: 340, cpc: 58.4,  cpm: 3675.9, ctr: 6.3, budget: 25000 },
     { name: 'cp05', spent: 28510, reach: 9938, impressions: 10083, linkClicks: 208, cpc: 137.1, cpm: 2827.5, ctr: 2.1, budget: 25000 },
   ];
 
