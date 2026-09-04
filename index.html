@@ -6,7 +6,7 @@
   <title>Affalitycs — Shopee Affiliate × Facebook Ads Dashboard</title>
   <meta name="description" content="Tool analisis ROAS dan profitabilitas untuk Shopee Affiliate yang menggunakan Facebook Ads. Upload dua file, langsung dapat insight." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='10' fill='%231e1b4b'/%3E%3Cpath d='M12 30L19.5 10.5' stroke='%2338bdf8' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M20.5 10.5L28 30' stroke='%23ee4d2d' stroke-width='3.5' stroke-linecap='round'/%3E%3Cpath d='M15 22.5H25' stroke='%2310b981' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M22.5 19.5L25.5 22.5L22.5 25.5' stroke='%2310b981' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='20' cy='9.5' r='2' fill='%2338bdf8'/%3E%3C/svg%3E" />
-  <link rel="stylesheet" href="style.css?v=20260904q" />
+  <link rel="stylesheet" href="style.css?v=20260904u" />
   <style>
     /* Critical Guide Banner & Button Fallback */
     .guide-banner {
@@ -63,6 +63,105 @@
       background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%) !important;
       transform: translateY(-2px) !important;
       box-shadow: 0 6px 18px rgba(79, 70, 229, 0.45) !important;
+    }
+    .modal-header-top {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      gap: 16px !important;
+      margin-bottom: 6px !important;
+    }
+    .modal-header-top h2 {
+      margin-bottom: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 8px !important;
+      font-size: 20px !important;
+      font-weight: 800 !important;
+    }
+    .modal-close {
+      width: 34px !important;
+      height: 34px !important;
+      border-radius: 50% !important;
+      border: 1px solid var(--border, #e2e8f0) !important;
+      background: var(--bg-page, #f8fafc) !important;
+      color: var(--text-secondary, #475569) !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      cursor: pointer !important;
+      transition: all 0.2s ease !important;
+      outline: none !important;
+      padding: 0 !important;
+      line-height: 1 !important;
+      flex-shrink: 0 !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+    }
+    .modal-close svg {
+      display: block !important;
+      stroke: currentColor !important;
+      transition: transform 0.2s ease !important;
+    }
+    .modal-close:hover {
+      background: #fee2e2 !important;
+      color: #ef4444 !important;
+      border-color: #fca5a5 !important;
+      transform: rotate(90deg) scale(1.08) !important;
+    }
+    .guide-card {
+      background: var(--bg-card, #ffffff);
+      border: 1px solid var(--border, #e2e8f0);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .guide-card-head {
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      gap: 12px !important;
+      margin-bottom: 10px !important;
+    }
+    .guide-badge {
+      font-size: 14.5px !important;
+      font-weight: 750 !important;
+      color: var(--text-primary, #0f172a);
+    }
+    .guide-req {
+      font-size: 10.5px !important;
+      font-weight: 800 !important;
+      padding: 3px 10px !important;
+      border-radius: 6px !important;
+      text-transform: uppercase !important;
+    }
+    .guide-req.wajib {
+      background: rgba(239, 68, 68, 0.12) !important;
+      color: #ef4444 !important;
+      border: 1px solid rgba(239, 68, 68, 0.25) !important;
+    }
+    .guide-req.opsional {
+      background: rgba(99, 102, 241, 0.12) !important;
+      color: #6366f1 !important;
+      border: 1px solid rgba(99, 102, 241, 0.25) !important;
+    }
+    .gtag {
+      display: inline-flex !important;
+      align-items: center !important;
+      background: var(--bg-page, #f8fafc) !important;
+      border: 1px solid var(--border, #e2e8f0) !important;
+      color: var(--text-primary, #0f172a) !important;
+      font-size: 11.5px !important;
+      font-weight: 600 !important;
+      font-family: monospace !important;
+      padding: 3px 9px !important;
+      border-radius: 6px !important;
+    }
+    .guide-tags {
+      display: flex !important;
+      flex-wrap: wrap !important;
+      gap: 6px !important;
+      margin-top: 8px !important;
     }
   </style>
 </head>
@@ -202,12 +301,17 @@
   </section>
 
   <!-- GUIDE MODAL -->
-  <div id="guide-modal" class="modal-overlay" style="display:none">
+  <div id="guide-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeGuideModal()">
     <div class="modal-box guide-modal-box">
       <div class="modal-header">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="modal-header-top">
           <h2>📘 Panduan Persyaratan Data Affalitycs</h2>
-          <button type="button" class="modal-close" onclick="closeGuideModal()">✕</button>
+          <button type="button" class="modal-close" onclick="closeGuideModal()" title="Tutup Panduan (Esc)" aria-label="Tutup Panduan">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
         <p>Ikuti checklist berikut saat mengunduh data agar semua metrik (Campaign, Ad Set, Ad, Real CPC, dan Kebocoran Trafik) terhitung otomatis.</p>
       </div>
@@ -215,17 +319,18 @@
         <!-- Section 1: Facebook Ads -->
         <div class="guide-card">
           <div class="guide-card-head">
-            <span class="guide-badge fb">1. Facebook Ads Report</span>
+            <span class="guide-badge fb">📘 1. Facebook Ads Report</span>
             <span class="guide-req wajib">WAJIB</span>
           </div>
+          <div class="guide-source">📍 <strong>Sumber:</strong> Meta Ads Manager ➔ Tab <strong>Iklan (Ads)</strong></div>
           <ol class="guide-steps">
-            <li>Buka <strong>Meta Ads Manager</strong> lalu masuk ke tab <strong>Iklan (Ads)</strong>.</li>
-            <li>Buka menu <strong>Kolom (Columns)</strong> ➔ pilih <strong>Sesuaikan Kolom (Customize Columns)</strong>.</li>
-            <li>Centang kolom-kolom berikut:
+            <li>Masuk ke <strong>Meta Ads Manager</strong> lalu pastikan Anda berada di tab <strong>Iklan (Ads)</strong> (level ad, bukan campaign/adset).</li>
+            <li>Buka menu dropdown <strong>Kolom (Columns)</strong> ➔ pilih <strong>Sesuaikan Kolom (Customize Columns)</strong>.</li>
+            <li>Pastikan <strong>9 kolom wajib</strong> berikut dicentang:
               <div class="guide-tags">
                 <span class="gtag">Campaign name</span>
                 <span class="gtag">Ad set name</span>
-                <span class="gtag">Ad name (Tag Shopee)</span>
+                <span class="gtag">Ad name (Sub_ID)</span>
                 <span class="gtag">Amount spent</span>
                 <span class="gtag">Link clicks</span>
                 <span class="gtag">Landing page views</span>
@@ -234,36 +339,47 @@
                 <span class="gtag">CTR</span>
               </div>
             </li>
-            <li>Buka menu <strong>Rincian (Breakdown)</strong> ➔ <strong>Berdasarkan Waktu (By Time)</strong> ➔ pilih <strong>Hari (Day)</strong> <em>(sangat disarankan untuk akurasi harian)</em>.</li>
-            <li>Klik tombol <strong>Ekspor</strong> ➔ simpan dalam format <code>.xlsx</code> atau <code>.csv</code>.</li>
+            <li>Buka menu <strong>Rincian (Breakdown)</strong> ➔ <strong>Berdasarkan Waktu</strong> ➔ pilih <strong>Hari (Day)</strong> <em>(sangat disarankan agar data harian dan tren dapat dianalisis presisi)</em>.</li>
+            <li>Klik tombol <strong>Ekspor</strong> di pojok kanan atas ➔ simpan dalam format <code>.xlsx</code> atau <code>.csv</code>.</li>
           </ol>
         </div>
 
         <!-- Section 2: Shopee Conversion Report -->
         <div class="guide-card">
           <div class="guide-card-head">
-            <span class="guide-badge shopee">2. Shopee Affiliate Report (Komisi)</span>
+            <span class="guide-badge shopee">🛍️ 2. Shopee Affiliate Report (Komisi)</span>
             <span class="guide-req wajib">WAJIB</span>
           </div>
+          <div class="guide-source">📍 <strong>Sumber:</strong> Portal Shopee Affiliate ➔ Menu <strong>Laporan Konversi</strong></div>
           <ol class="guide-steps">
-            <li>Buka portal <strong>Shopee Affiliate Program</strong>.</li>
+            <li>Login ke portal <strong>Shopee Affiliate Program</strong> di web browser.</li>
             <li>Pilih menu <strong>Laporan</strong> ➔ <strong>Laporan Konversi</strong>.</li>
-            <li>Tentukan <strong>rentang tanggal</strong> yang sama dengan periode iklan Facebook Anda.</li>
-            <li>Pastikan saat membuat link affiliate, Anda menyematkan Sub_ID pada <code>Tag_link1</code> atau <code>Tag_link3</code> (contoh: <code>gacoan01</code>, <code>pamper03</code>).</li>
-            <li>Klik tombol <strong>Ekspor</strong> dan unduh file <code>.csv</code>.</li>
+            <li>Tentukan <strong>rentang tanggal</strong> yang sama persis dengan periode iklan Facebook Ads Anda.</li>
+            <li>Klik tombol <strong>Ekspor (.csv)</strong> dan unduh file hasil ekspor.</li>
+            <li>
+              <div class="guide-tip-box">
+                💡 <strong>Kunci Pencocokan Otomatis:</strong> Saat men-generate link affiliate di Shopee, selalu sematkan kode identitas iklan pada kolom <strong>Sub_ID</strong> / <code>Tag_link1</code> atau <code>Tag_link3</code> (contoh: <code>cp01</code>, <code>gacoan02</code>). Affalitycs akan langsung mencocokkan biaya iklan FB dengan komisi Shopee tanpa perlu mapping manual!
+              </div>
+            </li>
           </ol>
         </div>
 
         <!-- Section 3: Shopee Click Report -->
         <div class="guide-card">
           <div class="guide-card-head">
-            <span class="guide-badge clicks">3. Shopee Website Click Report</span>
+            <span class="guide-badge clicks">🌐 3. Shopee Website Click Report</span>
             <span class="guide-req opsional">SANGAT DISARANKAN</span>
           </div>
+          <div class="guide-source">📍 <strong>Sumber:</strong> Portal Shopee Affiliate ➔ Menu <strong>Laporan Klik Situs Web</strong></div>
           <ol class="guide-steps">
-            <li>Di portal <strong>Shopee Affiliate Program</strong>, buka menu <strong>Laporan</strong> ➔ <strong>Laporan Klik Situs Web</strong>.</li>
-            <li>Pilih rentang tanggal yang sama lalu klik <strong>Ekspor</strong> (file <code>.csv</code>).</li>
-            <li><strong>Manfaat file ini:</strong> Mengukur berapa klik iklan FB yang <em>benar-benar mendarat</em> di Shopee untuk menghitung <strong>Real CPC</strong> dan <strong>% Klik Hilang (Bocor)</strong> secara akurat.</li>
+            <li>Di portal Shopee Affiliate, buka menu <strong>Laporan</strong> ➔ <strong>Laporan Klik Situs Web</strong>.</li>
+            <li>Pilih rentang tanggal yang sama lalu klik <strong>Ekspor (.csv)</strong>.</li>
+            <li>
+              <div class="guide-feature-box">
+                🎯 <strong>Mengapa File Ini Sangat Krusial?</strong>
+                File ini mencatat berapa banyak pengunjung FB yang <em>benar-benar berhasil mendarat</em> di Shopee. Dengan mengunggah file ini, Affalitycs dapat membuka analisis <strong>Real CPC</strong> (biaya per pengunjung riil) dan mengukur <strong>% Kebocoran Trafik</strong> (klik yang hilang sebelum membuka Shopee).
+              </div>
+            </li>
           </ol>
         </div>
       </div>
@@ -274,7 +390,7 @@
   </div>
 
   <!-- LIKE & SUPPORT MODAL -->
-  <div id="like-modal" class="modal-overlay" style="display:none">
+  <div id="like-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeLikeModal()">
     <div class="modal-box like-modal-box">
       <div class="like-modal-content">
         <div class="like-heart-icon">❤️</div>
@@ -294,14 +410,19 @@
   </div>
 
   <!-- TUTORIAL MODAL -->
-  <div id="tutorial-modal" class="modal-overlay" style="display:none">
+  <div id="tutorial-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeTutorialModal()">
     <div class="modal-box tutorial-modal-box">
       <div class="modal-header">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div class="modal-header-top">
           <h2>📖 Tutorial & Petunjuk Penggunaan Affalitycs</h2>
-          <button type="button" class="modal-close" onclick="closeTutorialModal()">✕</button>
+          <button type="button" class="modal-close" onclick="closeTutorialModal()" title="Tutup Tutorial (Esc)" aria-label="Tutup Tutorial">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
-        <p>Panduan praktis mulai dari persiapan data hingga strategi membaca dashboard untuk meningkatkan profit affiliate Anda.</p>
+        <p>Panduan terstruktur mulai dari penyiapan file, pemahaman rasio kebocoran, hingga strategi pembacaan dashboard untuk memaksimalkan profit affiliate Anda.</p>
       </div>
       <div class="tutorial-modal-content">
         
@@ -320,94 +441,227 @@
               <span class="guide-badge fb">📘 1. Facebook Ads Report</span>
               <span class="guide-req wajib">WAJIB</span>
             </div>
-            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">Ekspor dari <strong>Meta Ads Manager</strong> pada level <strong>Iklan (Ads)</strong>:</p>
+            <div class="guide-source">📍 <strong>Sumber:</strong> Meta Ads Manager ➔ Tab <strong>Iklan (Ads)</strong></div>
             <ol class="guide-steps">
-              <li>Buka menu <strong>Kolom</strong> ➔ <strong>Sesuaikan Kolom</strong> ➔ Centang: <code>Campaign name</code>, <code>Ad set name</code>, <code>Ad name</code>, <code>Amount spent</code>, <code>Link clicks</code>, <code>Landing page views</code>, <code>Impressions</code>, <code>CPC</code>, <code>CTR</code>.</li>
-              <li>Buka menu <strong>Rincian (Breakdown)</strong> ➔ <strong>Berdasarkan Waktu</strong> ➔ pilih <strong>Hari (Day)</strong>.</li>
-              <li>Klik <strong>Ekspor</strong> ➔ simpan format <code>.xlsx</code> atau <code>.csv</code>.</li>
+              <li>Masuk ke <strong>Meta Ads Manager</strong> lalu pastikan Anda berada di tab <strong>Iklan (Ads)</strong> (level ad, bukan campaign/adset).</li>
+              <li>Buka menu dropdown <strong>Kolom (Columns)</strong> ➔ pilih <strong>Sesuaikan Kolom (Customize Columns)</strong>.</li>
+              <li>Pastikan <strong>9 kolom wajib</strong> berikut dicentang:
+                <div class="guide-tags">
+                  <span class="gtag">Campaign name</span>
+                  <span class="gtag">Ad set name</span>
+                  <span class="gtag">Ad name (Sub_ID)</span>
+                  <span class="gtag">Amount spent</span>
+                  <span class="gtag">Link clicks</span>
+                  <span class="gtag">Landing page views</span>
+                  <span class="gtag">Impressions</span>
+                  <span class="gtag">CPC</span>
+                  <span class="gtag">CTR</span>
+                </div>
+              </li>
+              <li>Buka menu <strong>Rincian (Breakdown)</strong> ➔ <strong>Berdasarkan Waktu</strong> ➔ pilih <strong>Hari (Day)</strong> <em>(sangat disarankan agar data harian dan tren dapat dianalisis presisi)</em>.</li>
+              <li>Klik tombol <strong>Ekspor</strong> di pojok kanan atas ➔ simpan dalam format <code>.xlsx</code> atau <code>.csv</code>.</li>
             </ol>
           </div>
 
-          <div class="guide-card" style="margin-top:12px;">
+          <div class="guide-card">
             <div class="guide-card-head">
               <span class="guide-badge shopee">🛍️ 2. Shopee Affiliate Report (Komisi)</span>
               <span class="guide-req wajib">WAJIB</span>
             </div>
-            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">Ekspor dari portal <strong>Shopee Affiliate Program</strong>:</p>
+            <div class="guide-source">📍 <strong>Sumber:</strong> Portal Shopee Affiliate ➔ Menu <strong>Laporan Konversi</strong></div>
             <ol class="guide-steps">
+              <li>Login ke portal <strong>Shopee Affiliate Program</strong> di web browser.</li>
               <li>Pilih menu <strong>Laporan</strong> ➔ <strong>Laporan Konversi</strong>.</li>
-              <li>Tentukan rentang tanggal yang sama dengan iklan FB Anda ➔ Klik <strong>Ekspor (.csv)</strong>.</li>
-              <li><em>Tips:</em> Saat membuat link affiliate di Shopee, sematkan Sub_ID pada <code>Tag_link1</code> (contoh: <code>gacoan01</code>, <code>pamper03</code>) yang cocok dengan nama Ad Facebook Anda.</li>
+              <li>Tentukan <strong>rentang tanggal</strong> yang sama persis dengan periode iklan Facebook Ads Anda.</li>
+              <li>Klik tombol <strong>Ekspor (.csv)</strong> dan unduh file hasil ekspor.</li>
+              <li>
+                <div class="guide-tip-box">
+                  💡 <strong>Kunci Pencocokan Otomatis:</strong> Saat men-generate link affiliate di Shopee, selalu sematkan kode identitas iklan pada kolom <strong>Sub_ID</strong> / <code>Tag_link1</code> atau <code>Tag_link3</code> (contoh: <code>cp01</code>, <code>gacoan02</code>). Affalitycs akan langsung mencocokkan biaya iklan FB dengan komisi Shopee tanpa perlu mapping manual!
+                </div>
+              </li>
             </ol>
           </div>
 
-          <div class="guide-card" style="margin-top:12px;">
+          <div class="guide-card">
             <div class="guide-card-head">
               <span class="guide-badge clicks">🌐 3. Shopee Website Click Report</span>
               <span class="guide-req opsional">SANGAT DISARANKAN</span>
             </div>
-            <p style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">Dari portal Shopee Affiliate ➔ menu <strong>Laporan Klik Situs Web</strong> ➔ Ekspor (.csv).</p>
-            <p style="font-size:12.5px;color:var(--text-muted);"><em>Fungsi vital:</em> Mengukur berapa klik FB yang benar-benar mendarat di Shopee untuk menghitung <strong>Real CPC</strong> dan <strong>% Kebocoran Trafik</strong>.</p>
+            <div class="guide-source">📍 <strong>Sumber:</strong> Portal Shopee Affiliate ➔ Menu <strong>Laporan Klik Situs Web</strong></div>
+            <ol class="guide-steps">
+              <li>Di portal Shopee Affiliate, buka menu <strong>Laporan</strong> ➔ <strong>Laporan Klik Situs Web</strong>.</li>
+              <li>Pilih rentang tanggal yang sama lalu klik <strong>Ekspor (.csv)</strong>.</li>
+              <li>
+                <div class="guide-feature-box">
+                  🎯 <strong>Mengapa File Ini Sangat Krusial?</strong>
+                  File ini mencatat berapa banyak pengunjung FB yang <em>benar-benar berhasil mendarat</em> di Shopee. Dengan mengunggah file ini, Affalitycs dapat membuka analisis <strong>Real CPC</strong> (biaya per pengunjung riil) dan mengukur <strong>% Kebocoran Trafik</strong> (klik yang hilang sebelum membuka Shopee).
+                </div>
+              </li>
+            </ol>
           </div>
         </div>
 
         <!-- Tab 2: Funnel & Kebocoran -->
         <div id="tut-funnel" class="tut-pane" style="display:none;">
           <div class="guide-card">
-            <h4 style="font-size:14.5px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">🔍 Memahami Funnel Konversi 3-Tahap</h4>
-            <p style="font-size:13px;color:var(--text-secondary);line-height:1.6;">
-              Banyak pengiklan FB hanya terpaku pada <strong>CPC FB murah</strong> (misal Rp 100/klik), tetapi tidak menyadari banyak klik yang gagal memuat link Shopee.
-            </p>
-            <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.6;">
-              <div><strong>1. Klik Iklan FB</strong> ➔ Jumlah klik link yang dicatat Meta.</div>
-              <div style="color:var(--accent-red);margin:4px 0 4px 16px;">⬇ <em>Kebocoran (% Bocor): Pengunjung mental di tengah jalan sebelum membuka Shopee.</em></div>
-              <div><strong>2. Klik Sampai Shopee</strong> ➔ Pengunjung yang sukses membuka halaman produk di Shopee.</div>
-              <div style="color:var(--primary);margin:4px 0 4px 16px;">⬇ <em>Shopee CVR: Rasio checkout dari pengunjung yang sudah masuk.</em></div>
-              <div><strong>3. Pesanan (Orders)</strong> ➔ Pesanan valid yang menghasilkan komisi affiliate.</div>
+            <div class="guide-section-title">
+              <span class="section-icon">🔍</span>
+              <div>
+                <h4>Memahami Funnel Konversi 3-Tahap & Real CPC</h4>
+                <p>Banyak pengiklan affiliate terjebak ilusi <strong>"CPC FB Murah"</strong> (misal Rp 100/klik), tetapi tidak menyadari banyak klik yang gagal memuat tautan Shopee.</p>
+              </div>
             </div>
-            <p style="font-size:13px;color:var(--text-secondary);">
-              <strong>Real CPC</strong> = Biaya riil per 1 pengunjung yang mendarat di Shopee. Jika kebocoran tinggi (misal 50%), maka Real CPC Anda sebenarnya 2x lipat lebih mahal daripada CPC FB!
-            </p>
+
+            <div class="tut-funnel-step">
+              <div class="tut-funnel-num step-1">1</div>
+              <div class="tut-funnel-info">
+                <strong>Tahap 1: Klik Iklan Facebook (Outbound Clicks)</strong>
+                <p>Jumlah klik tautan yang tercatat di sistem Meta Ads ketika audiens tertarik dan menekan iklan Anda di Facebook atau Instagram.</p>
+              </div>
+            </div>
+
+            <div class="tut-leak-callout">
+              <div class="leak-header">
+                <span class="leak-icon">⚠️</span>
+                <strong>KEBOCORAN TRAFIK (% BOCOR) — PENGUNJUNG MENTAL DI JALAN</strong>
+              </div>
+              <p>Selisih antara Klik FB dan Klik yang benar-benar tercatat di Shopee. Kebocoran terjadi akibat loading lambat, koneksi pengguna terputus, kegagalan deep-link pembuka aplikasi Shopee, atau pengguna membatalkan browser sebelum produk tampil.</p>
+              <div class="leak-formula">
+                <code>% Kebocoran = ((Klik Iklan FB - Klik Shopee) ÷ Klik Iklan FB) × 100%</code>
+              </div>
+            </div>
+
+            <div class="tut-funnel-step">
+              <div class="tut-funnel-num step-2">2</div>
+              <div class="tut-funnel-info">
+                <strong>Tahap 2: Klik Sampai Shopee (Inbound Clicks) & Real CPC</strong>
+                <p>Jumlah pengunjung nyata yang berhasil mendarat di toko atau halaman produk Shopee Anda. Di tahap inilah biaya riil per calon pembeli dihitung:</p>
+                <div class="formula-chip">
+                  <strong>Real CPC = Total Biaya Iklan (Spend) ÷ Klik Riil Shopee</strong>
+                </div>
+                <div class="tut-example-box">
+                  💡 <em>Simulasi:</em> Jika Anda menghabiskan Rp 100.000 untuk 1.000 Klik FB (CPC FB = Rp 100), namun hanya 500 klik yang sampai ke Shopee (Kebocoran 50%), maka <strong>Real CPC Anda sebenarnya adalah Rp 200 per calon pembeli</strong> (2x lipat lebih mahal!).
+                </div>
+              </div>
+            </div>
+
+            <div class="tut-funnel-step">
+              <div class="tut-funnel-num step-3">3</div>
+              <div class="tut-funnel-info">
+                <strong>Tahap 3: Pesanan Valid (Orders) & Shopee CVR</strong>
+                <p>Pengunjung yang memutuskan membeli produk dan transaksinya berhasil diverifikasi oleh Shopee hingga menghasilkan komisi affiliate.</p>
+                <div class="formula-chip">
+                  <strong>Shopee CVR = (Total Pesanan ÷ Klik Riil Shopee) × 100%</strong>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         <!-- Tab 3: Master Decision Table -->
         <div id="tut-master" class="tut-pane" style="display:none;">
           <div class="guide-card">
-            <h4 style="font-size:14.5px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">📊 Cara Mengevaluasi Iklan di Master Table</h4>
-            <ul class="guide-steps">
-              <li><strong>Kolom Campaign Sticky</strong>: Saat menggeser tabel ke kanan, nama campaign tetap terkunci di kiri.</li>
-              <li><strong>Alur Funnel Alami</strong>: <code>Spend</code> ➔ <code>Klik FB</code> ➔ <code>Klik Shopee</code> ➔ <code>% Bocor</code> ➔ <code>Orders</code> ➔ <code>CPC FB</code> ➔ <code>Real CPC</code> ➔ <code>CPO</code> ➔ <code>Komisi</code> ➔ <code>Profit</code> ➔ <code>ROAS</code>.</li>
-              <li><strong>Default Sort Spend Terbesar</strong>: Iklan dengan biaya terbesar otomatis di atas karena memiliki risiko modal tertinggi.</li>
-              <li><strong>Indikator ROAS</strong>:
-                <br>• <span style="color:#10b981;font-weight:700;">ROAS ≥ 2x (Hijau)</span>: Sangat menguntungkan, siap scale up budget.
-                <br>• <span style="color:#f59e0b;font-weight:700;">ROAS 1x - 2x (Kuning)</span>: Break-even / untung tipis, optimasi materi iklan & kebocoran link.
-                <br>• <span style="color:#ef4444;font-weight:700;">ROAS &lt; 1x (Merah)</span>: Rugi (biaya iklan melebihi komisi), pertimbangkan untuk dimatikan.
-              </li>
-            </ul>
+            <div class="guide-section-title">
+              <span class="section-icon">📊</span>
+              <div>
+                <h4>Strategi Pengambilan Keputusan (Master Decision Table)</h4>
+                <p>Master Decision Table menyatukan performa Facebook Ads dan Shopee Affiliate dalam satu baris per campaign/ad. Gunakan aturan lampu lalu lintas (Traffic Light System) berikut untuk mengevaluasi efektivitas iklan Anda:</p>
+              </div>
+            </div>
+
+            <div class="tut-roas-grid">
+              <div class="roas-card roas-green">
+                <div class="roas-card-header">
+                  <span class="roas-badge green">🟢 ROAS ≥ 2.0x</span>
+                  <strong>Sangat Profit (Scale Up)</strong>
+                </div>
+                <p>Komisi yang didapat minimal 2x lipat dari total modal biaya iklan.</p>
+                <div class="roas-action">
+                  <strong>Aksi Rekomendasi:</strong>
+                  <ul>
+                    <li>Naikkan budget harian secara bertahap (10% - 20% per hari) agar tidak merusak learning phase.</li>
+                    <li>Duplikat ad set pemenang ke audiens baru (Lookalike atau broad target).</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="roas-card roas-yellow">
+                <div class="roas-card-header">
+                  <span class="roas-badge yellow">🟡 ROAS 1.0x – 2.0x</span>
+                  <strong>Break-Even / Profit Tipis (Optimasi)</strong>
+                </div>
+                <p>Iklan masih menghasilkan keuntungan tipis atau balik modal.</p>
+                <div class="roas-action">
+                  <strong>Aksi Rekomendasi:</strong>
+                  <ul>
+                    <li>Periksa % Kebocoran link di funnel; jika >30%, perbaiki deep link atau gunakan landing page perantara yang ringan.</li>
+                    <li>Uji hook video/gambar baru (3 detik pertama) untuk menekan CPC FB lebih murah.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="roas-card roas-red">
+                <div class="roas-card-header">
+                  <span class="roas-badge red">🔴 ROAS &lt; 1.0x</span>
+                  <strong>Rugi (Evaluasi & Cut Loss)</strong>
+                </div>
+                <p>Biaya iklan lebih besar daripada komisi affiliate yang diperoleh.</p>
+                <div class="roas-action">
+                  <strong>Aksi Rekomendasi:</strong>
+                  <ul>
+                    <li>Jika biaya iklan sudah melampaui 1x - 2x target CPO tanpa menghasilkan konversi, segera <strong>matikan (pause) iklan</strong>.</li>
+                    <li>Ganti penawaran dengan produk komisi ekstra (Shopee Xtra Commission) yang bermargin lebih tinggi.</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div class="tut-table-features">
+              <h5>Fitur Cerdas Master Table:</h5>
+              <ul class="tut-checklist">
+                <li><strong>Kolom Sticky (Nama Campaign):</strong> Kolom nama campaign tetap terkunci di sebelah kiri saat Anda menggeser tabel ke samping kanan.</li>
+                <li><strong>Default Urutan Biaya Terbesar:</strong> Iklan dengan biaya tertinggi otomatis berada di paling atas karena memiliki risiko modal terbesar.</li>
+                <li><strong>Alur Funnel Alami (Kiri ke Kanan):</strong> Spend ➔ Klik FB ➔ Klik Shopee ➔ % Bocor ➔ Orders ➔ CPC FB ➔ Real CPC ➔ CPO ➔ Komisi ➔ Profit ➔ ROAS.</li>
+              </ul>
+            </div>
           </div>
         </div>
 
         <!-- Tab 4: Fitur Cepat -->
         <div id="tut-features" class="tut-pane" style="display:none;">
           <div class="guide-card">
-            <h4 style="font-size:14.5px;font-weight:700;color:var(--text-primary);margin-bottom:6px;">⚡ Fitur Cepat untuk Optimasi Harian</h4>
-            <div style="display:flex;flex-direction:column;gap:12px;margin-top:10px;">
+            <div class="guide-section-title">
+              <span class="section-icon">⚡</span>
               <div>
-                <strong style="color:var(--primary);">🎯 Drill-Down Campaign ke Produk:</strong>
-                <p style="font-size:13px;color:var(--text-secondary);margin:2px 0 0;">Klik nama campaign di kolom pertama Master Table (misal <code>cp03 ↗</code>). Layar akan otomatis menggulir ke Tabel Produk dan menyaring produk yang terjual lewat campaign tersebut.</p>
+                <h4>Fitur Cepat untuk Efisiensi Optimasi Harian</h4>
+                <p>Maksimalkan waktu Anda dengan berbagai shortcut dan alat bantu otomatis di Affalitycs:</p>
               </div>
-              <div>
-                <strong style="color:#10b981;">📋 Salin Ringkasan (WA):</strong>
-                <p style="font-size:13px;color:var(--text-secondary);margin:2px 0 0;">Klik tombol Salin Ringkasan di bar atas. Semua ringkasan performa otomatis tersalin rapi dengan format WhatsApp siap kirim ke tim/grup.</p>
+            </div>
+
+            <div class="tut-feature-grid">
+              <div class="tut-feature-item">
+                <strong><span>🎯</span> Drill-Down Campaign ➔ Produk</strong>
+                <p>Klik nama campaign pada kolom pertama Master Table (misal <code>cp03 ↗</code>). Layar otomatis menggulir ke Tabel Produk dan menyaring produk-produk yang dibeli melalui campaign tersebut.</p>
               </div>
-              <div>
-                <strong style="color:#f59e0b;">➕ Custom Pajak / Fee Akun (%):</strong>
-                <p style="font-size:13px;color:var(--text-secondary);margin:2px 0 0;">Jika Anda menyewa akun agency (misal fee 5%) atau terkena PPN 11%, masukkan persentasenya di kotak input. Seluruh biaya, profit, dan ROAS langsung terhitung ulang secara presisi.</p>
+              <div class="tut-feature-item">
+                <strong><span>📋</span> Salin Ringkasan WhatsApp (1-Klik)</strong>
+                <p>Klik tombol <em>Salin Ringkasan</em> di bar atas. Laporan performa harian berformat emoji profesional langsung tersalin ke clipboard, siap dikirimkan ke tim, klien, atau grup ads Anda.</p>
               </div>
-              <div>
-                <strong style="color:#8b5cf6;">🕒 Jam Emas (Golden Hours):</strong>
-                <p style="font-size:13px;color:var(--text-secondary);margin:2px 0 0;">Pantau jam berapa klik pengunjung berkonversi menjadi pesanan (00 - 23 WIB) untuk menentukan jadwal tayang iklan yang paling menguntungkan.</p>
+              <div class="tut-feature-item">
+                <strong><span>⚙️</span> Custom Pajak / Fee Akun (%)</strong>
+                <p>Jika menggunakan agency ad account (fee 3-7%) atau terkena PPN 11%, ketikkan persentasenya di input bar. Seluruh spend, profit bersih, dan ROAS akan terhitung ulang secara instan.</p>
+              </div>
+              <div class="tut-feature-item">
+                <strong><span>🕒</span> Golden Hours (Jam Emas Konversi)</strong>
+                <p>Grafik distribusi jam (00:00 - 23:00 WIB) menunjukkan jam-jam spesifik di mana calon pembeli paling banyak checkout. Sangat bermanfaat untuk strategi <em>Dayparting</em> iklan.</p>
+              </div>
+              <div class="tut-feature-item">
+                <strong><span>💾</span> Backup & Restore Riwayat JSON</strong>
+                <p>Ekspor sesi analisis ke file <code>.json</code> melalui menu titik tiga (⋮). Anda dapat membuka kembali laporan kapan saja tanpa perlu mencari dan mengunggah ulang file mentah.</p>
+              </div>
+              <div class="tut-feature-item">
+                <strong><span>🌗</span> Mode Gelap (Dark Mode)</strong>
+                <p>Bekerja larut malam menganalisis data? Aktifkan dark mode di pojok kanan atas untuk kenyamanan mata dan visual kontras tinggi.</p>
               </div>
             </div>
           </div>
@@ -415,16 +669,24 @@
 
       </div>
       <div class="modal-actions">
-        <button type="button" class="btn-primary" onclick="closeTutorialModal()">Tutup Tutorial</button>
+        <button type="button" class="btn-primary" onclick="closeTutorialModal()">Saya Mengerti, Tutup Tutorial</button>
       </div>
     </div>
   </div>
 
   <!-- MAPPING MODAL -->
-  <div id="mapping-modal" class="modal-overlay" style="display:none">
+  <div id="mapping-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)skipMapping()">
     <div class="modal-box">
       <div class="modal-header">
-        <h2>🔗 Hubungkan Tag Shopee & Iklan Facebook (Mapping)</h2>
+        <div class="modal-header-top">
+          <h2>🔗 Hubungkan Tag Shopee & Iklan Facebook (Mapping)</h2>
+          <button type="button" class="modal-close" onclick="skipMapping()" title="Tutup (Esc)" aria-label="Tutup Mapping">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
         <p>Beberapa Tag dari Shopee (<code>Tag_link1</code> / <code>Tag_link3</code>) tidak cocok otomatis dengan nama di Facebook Ads. Tentukan pasangannya di bawah ini agar <strong>Spend & Komisi</strong> terhubung, atau klik <strong>Lewati</strong> jika tag tersebut adalah traffic organik.</p>
       </div>
       <div id="mapping-rows" class="mapping-rows"></div>
@@ -679,7 +941,7 @@
   <script src="vendor/chart.umd.min.js"></script>
   <script src="vendor/chartjs-plugin-datalabels.min.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
-  <script src="parsers.js?v=20260904q"></script>
-  <script src="app.js?v=20260904r"></script>
+  <script src="parsers.js?v=20260904u"></script>
+  <script src="app.js?v=20260904u"></script>
 </body>
 </html>
