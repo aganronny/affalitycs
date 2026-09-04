@@ -454,7 +454,11 @@ async function runAnalysis() {
     }
   } catch (err) {
     hideLoading();
-    alert('Terjadi kesalahan saat memproses file: ' + err.message + '\n\nBuka Console (F12) untuk detail.');
+    showAlertModal({
+      title: 'Gagal Memproses File',
+      message: 'Terjadi kesalahan saat memproses file: <strong>' + esc(err.message) + '</strong><br><br><small style="color:var(--text-muted)">Buka Console browser (F12) untuk melihat detail teknis.</small>',
+      type: 'error'
+    });
     console.error(err);
   }
 }
@@ -691,13 +695,22 @@ async function saveSnapshot() {
 }
 
 async function clearHistory() {
-  if (!confirm('Hapus semua riwayat analisis? Sesi upload tidak ikut terhapus.')) return;
+  const confirmed = await showConfirmModal({
+    title: 'Hapus Riwayat Analisis?',
+    message: 'Semua snapshot riwayat performa yang tersimpan di browser ini akan dihapus. Sesi upload data saat ini tidak akan ikut terhapus.',
+    confirmText: 'Ya, Hapus Riwayat',
+    cancelText: 'Batal',
+    danger: true,
+    icon: '🗑️'
+  });
+  if (!confirmed) return;
   try {
     const db = await idbOpen();
     db.transaction('history', 'readwrite').objectStore('history').clear();
   } catch (e) {}
   state.history = [];
   renderAll();
+  showToast('🗑️ Riwayat analisis berhasil dihapus');
 }
 
 // --- BACKUP / RESTORE (file JSON) ---------------------------------
@@ -714,6 +727,7 @@ function backupData() {
       parserVersion: PARSER_VERSION,
       shopeeRows: state.shopeeRows, fbCampaigns: state.fbCampaigns,
       fbBreakdown: state.fbBreakdown, fbAds: state.fbAds || [], clickReport: state.clickReport,
+      mapping: state.mapping,
       filterStart: document.getElementById('filter-start')?.value || '',
       filterEnd: document.getElementById('filter-end')?.value || '',
       taxFee: getTaxFeePct(),
@@ -721,19 +735,20 @@ function backupData() {
       validOrders: document.getElementById('valid-orders-toggle')?.checked !== false,
     };
     if (ses.shopeeRows.length || ses.fbCampaigns.length || ses.clickReport.length) bundle.session = ses;
-    const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'affalitycs-backup-' + todayYmd().replace(/-/g, '') + '.json';
     a.click();
     URL.revokeObjectURL(a.href);
-  } catch (e) { alert('Pencadangan gagal: ' + e.message); }
+    showToast('💾 Cadangan data berhasil diunduh');
+  } catch (e) { showAlertModal({ title: 'Pencadangan Gagal', message: 'Gagal membuat file cadangan: ' + esc(e.message), type: 'error' }); }
 }
 
 async function restoreData(file) {
   try {
     const bundle = JSON.parse(await file.text());
-    if (!bundle || bundle.app !== 'affalitycs') { alert('File ini bukan cadangan Affalitycs.'); return; }
+    if (!bundle || bundle.app !== 'affalitycs') { showAlertModal({ title: 'File Tidak Valid', message: 'File ini bukan format cadangan Affalitycs yang sah.', type: 'warning' }); return; }
     const db = await idbOpen();
     let nHist = 0;
     if (Array.isArray(bundle.history)) {
@@ -753,9 +768,9 @@ async function restoreData(file) {
       restoreSession(); // pulihkan sesi + tampilkan dashboard
       return;
     }
-    alert('Pemulihan selesai: ' + nHist + ' snapshot riwayat dipulihkan.');
+    showAlertModal({ title: 'Pemulihan Selesai', message: `${nHist} snapshot riwayat analisis berhasil dipulihkan ke browser ini.`, type: 'success' });
     renderAll();
-  } catch (e) { alert('Pemulihan gagal — file rusak atau bukan cadangan yang valid. (' + e.message + ')'); }
+  } catch (e) { showAlertModal({ title: 'Pemulihan Gagal', message: 'File rusak atau bukan cadangan yang valid. (' + esc(e.message) + ')', type: 'error' }); }
 }
 
 checkResume();
@@ -1106,6 +1121,118 @@ function renderSmartReport() {
         <strong>${esc(worstFunnel.name)}</strong> — ${worstFunnel.dropClickToShopeePct.toFixed(0)}% klik tidak sampai ke Shopee (${fmt(worstFunnel.dropClickToShopee)} klik hilang)</div>` : ''}
     </div>`;
 }
+
+// --- CUSTOM CONFIRMATION & ALERT MODALS -------------------------
+function showConfirmModal({
+  title = 'Konfirmasi Tindakan',
+  message = 'Apakah Anda yakin ingin melanjutkan?',
+  confirmText = 'Ya, Lanjutkan',
+  cancelText = 'Batal',
+  danger = false,
+  icon = '⚠️',
+  iconBg = ''
+} = {}) {
+  return new Promise(resolve => {
+    const modal = document.getElementById('confirm-modal');
+    if (!modal) {
+      resolve(window.confirm(message ? `${title}\n\n${message.replace(/<[^>]+>/g, '')}` : title));
+      return;
+    }
+    const iconEl = document.getElementById('confirm-modal-icon');
+    const iconWrap = document.getElementById('confirm-icon-wrap');
+    const titleEl = document.getElementById('confirm-modal-title');
+    const msgEl = document.getElementById('confirm-modal-message');
+    const btnCancel = document.getElementById('confirm-btn-cancel');
+    const btnOk = document.getElementById('confirm-btn-ok');
+
+    if (iconEl) iconEl.textContent = icon;
+    if (iconWrap) {
+      iconWrap.className = 'confirm-icon-wrapper' + (danger ? ' is-danger' : ' is-primary');
+      if (iconBg) iconWrap.style.background = iconBg;
+      else iconWrap.style.background = '';
+    }
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.innerHTML = message;
+
+    if (btnCancel) {
+      if (cancelText) {
+        btnCancel.textContent = cancelText;
+        btnCancel.style.display = 'inline-flex';
+      } else {
+        btnCancel.style.display = 'none';
+      }
+    }
+
+    if (btnOk) {
+      btnOk.textContent = confirmText;
+      btnOk.className = 'btn-confirm-ok' + (danger ? ' btn-danger' : ' btn-primary-action');
+    }
+
+    modal.style.display = 'flex';
+
+    let resolved = false;
+    function cleanup(result) {
+      if (resolved) return;
+      resolved = true;
+      modal.style.display = 'none';
+      document.removeEventListener('keydown', onKeyDown);
+      modal.removeEventListener('click', onBackdropClick);
+      if (btnCancel) btnCancel.removeEventListener('click', onCancel);
+      if (btnOk) btnOk.removeEventListener('click', onOk);
+      resolve(result);
+    }
+
+    function onCancel() { cleanup(false); }
+    function onOk() { cleanup(true); }
+    function onBackdropClick(e) {
+      if (e.target === modal) cleanup(false);
+    }
+    function onKeyDown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cleanup(false);
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        cleanup(true);
+      }
+    }
+
+    if (btnCancel) btnCancel.addEventListener('click', onCancel);
+    if (btnOk) btnOk.addEventListener('click', onOk);
+    modal.addEventListener('click', onBackdropClick);
+    document.addEventListener('keydown', onKeyDown);
+
+    if (btnOk) setTimeout(() => btnOk.focus(), 50);
+  });
+}
+
+function showAlertModal({
+  title = 'Pemberitahuan',
+  message = '',
+  buttonText = 'Mengerti',
+  type = 'info',
+  icon = ''
+} = {}) {
+  const iconMap = {
+    info: 'ℹ️',
+    warning: '⚠️',
+    error: '❌',
+    success: '✅'
+  };
+  return showConfirmModal({
+    title,
+    message,
+    confirmText: buttonText,
+    cancelText: '',
+    danger: type === 'error',
+    icon: icon || iconMap[type] || 'ℹ️'
+  });
+}
+
+// Override window.alert as fallback to guarantee no browser native dialogs
+try {
+  window.alert = (msg) => showAlertModal({ title: 'Pemberitahuan', message: String(msg) });
+} catch (e) {}
 
 // --- GUIDE & TUTORIAL & LIKE MODALS -----------------------------
 function openGuideModal() {
@@ -2226,7 +2353,7 @@ function filterProductTable() {
 function exportExcel() {
   try {
     const camps = buildCampaignData().filter(c => c.spent > 0 || c.orders > 0);
-    if (camps.length === 0) { alert('Belum ada data untuk diekspor.'); return; }
+    if (camps.length === 0) { showToast('⚠️ Belum ada data untuk diekspor.'); return; }
     const wb = XLSX.utils.book_new();
 
     // Ringkasan
@@ -2290,12 +2417,15 @@ function exportExcel() {
     }
 
     XLSX.writeFile(wb, 'Affalitycs_' + (start || '') + (end ? '_' + end : '') + '.xlsx');
-  } catch (e) { alert('Export Excel gagal: ' + e.message); }
+    showToast('📗 Laporan Excel berhasil diunduh');
+  } catch (e) {
+    showAlertModal({ title: 'Export Excel Gagal', message: 'Terjadi kesalahan saat membuat file Excel: ' + esc(e.message), type: 'error' });
+  }
 }
 
 function exportTableCSV(tableId, filename) {
   const trs = [...document.querySelectorAll('#' + tableId + ' tr')];
-  if (trs.length === 0) { alert('Tabel masih kosong.'); return; }
+  if (trs.length === 0) { showToast('⚠️ Tabel masih kosong.'); return; }
   const csv = trs.map(tr => {
     return [...tr.querySelectorAll('th,td')].map(c => {
       const txt = (c.innerText || '').replace(/\s+/g, ' ').trim();
@@ -2308,11 +2438,12 @@ function exportTableCSV(tableId, filename) {
   a.download = filename + '_' + new Date().toISOString().slice(0, 10) + '.csv';
   a.click();
   URL.revokeObjectURL(a.href);
+  showToast('📄 File CSV berhasil diunduh');
 }
 
 function exportChartPNG(card) {
   const canvas = card.querySelector('.chart-wrap canvas');
-  if (!canvas) { alert('Chart belum ter-render (belum ada data).'); return; }
+  if (!canvas) { showToast('⚠️ Chart belum ter-render (belum ada data).'); return; }
   // Gambar ulang di canvas putih supaya PNG-nya tidak transparan
   const tmp = document.createElement('canvas');
   tmp.width = canvas.width;
@@ -2542,8 +2673,16 @@ function resetFilters() {
   applyFilters();
 }
 
-function resetAll() {
-  if (!confirm('Reset semua data dan kembali ke halaman upload?')) return;
+async function resetAll() {
+  const confirmed = await showConfirmModal({
+    title: 'Reset & Upload Ulang?',
+    message: 'Semua data analisis saat ini akan di-reset dan Anda akan kembali ke halaman awal upload file.',
+    confirmText: 'Ya, Upload Ulang',
+    cancelText: 'Batal',
+    danger: true,
+    icon: '↩️'
+  });
+  if (!confirmed) return;
   clearSession();
   shopeeFiles = []; fbFiles = []; clickFiles = [];
   state.shopeeRows = []; state.fbCampaigns = []; state.clickReport = [];
