@@ -82,6 +82,12 @@ t("orderHour diparse dari Waktu Pemesanan (23:35 -> 23)", () => {
   const rows = P.parseShopeeCSV(csv);
   assert.strictEqual(rows[0].orderHour, 23);
 });
+t("orderHour diparse dari Waktu Pemesanan format DD/MM/YYYY (14:35 -> 14)", () => {
+  const csv = 'ID Pemesanan,Status Pesanan,Waktu Pemesanan,Nama Barange,Komisi Bersih Affiliate (Rp),Tag_link1\n' +
+    'ORD9B,Tertunda,28/08/2026 14:35:00,Produk Z,100,cp01\n';
+  const rows = P.parseShopeeCSV(csv);
+  assert.strictEqual(rows[0].orderHour, 14);
+});
 t("orderHour null kalau Waktu Pemesanan kosong/rusak", () => {
   const csv = 'ID Pemesanan,Status Pesanan,Waktu Pemesanan,Nama Barange,Komisi Bersih Affiliate (Rp),Tag_link1\n' +
     'ORD8,Tertunda,,Produk Y,100,cp01\n';
@@ -109,6 +115,12 @@ t("format asli Shopee: BOM di kolom pertama, tag 'gacoan01----' -> tag1 'gacoan0
   assert.strictEqual(rows[0].tag1, 'gacoan01');
   assert.strictEqual(rows[0].date, '2026-08-28');
   assert.strictEqual(rows[1].perujuk, 'Others');
+});
+t("waktu klik format DD/MM/YYYY tetap terparse ke YYYY-MM-DD", () => {
+  const csv = 'Klik ID,Waktu Klik,Wilayah Klik,Tag_link,Perujuk\n' +
+    'abc999,28/08/2026 10:15:00,Indonesia,cp01----,Facebook\n';
+  const rows = P.parseClickReportCSV(csv);
+  assert.strictEqual(rows[0].date, '2026-08-28');
 });
 
 // ---------- parseFbCSV ----------
@@ -147,6 +159,10 @@ t("normalized match (beda spasi/huruf)", () => {
 t("fallback tag mentah kalau gak match sama sekali", () => {
   assert.deepStrictEqual(P.resolveShopeeKey({ tag1: 'zzz', tag3: '' }, fbSet, {}), { key: 'zzz', source: 'tag1_raw' });
 });
+t("tag '-' tidak salah cocok ke campaign pertama", () => {
+  assert.deepStrictEqual(P.resolveShopeeKey({ tag1: '-', tag3: '' }, fbSet, {}), { key: '(tidak ada tag)', source: 'none' });
+  assert.deepStrictEqual(P.resolveShopeeKey({ tag1: '', tag3: '-' }, fbSet, {}), { key: '(tidak ada tag)', source: 'none' });
+});
 
 // ---------- resolveClickKey ----------
 console.log('resolveClickKey');
@@ -154,6 +170,10 @@ t("'gacoan01----' -> exact via tag1", () =>
   assert.strictEqual(P.resolveClickKey('gacoan01----', new Set(['gacoan01']), {}), 'gacoan01'));
 t("mapping manual diprioritaskan", () =>
   assert.strictEqual(P.resolveClickKey('gacoan01----', new Set(), { gacoan01: 'Gacoan Ads' }), 'Gacoan Ads'));
+t("tag '-' atau kosong tidak salah cocok ke campaign pertama", () => {
+  assert.strictEqual(P.resolveClickKey('-', fbSet, {}), '(tidak ada tag)');
+  assert.strictEqual(P.resolveClickKey('', fbSet, {}), '(tidak ada tag)');
+});
 
 // ---------- extractFbBreakdown ----------
 console.log('extractFbBreakdown');
@@ -259,6 +279,19 @@ t("export level Ad: Ad name + Ad set + Campaign + Results fallback", () => {
   assert.strictEqual(rows[0].campaignName, 'gacoan');
   assert.strictEqual(rows[0].linkClicks, 120);
   assert.strictEqual(rows[0].spent, 15000);
+});
+t("extractFbAdRows membaca LPV, Ad Set, CPC, CTR dan format riil Meta", () => {
+  const csv = '"Reporting starts","Reporting ends","Campaign name","Ad set name","Ad name","Amount spent (IDR)","Link clicks","Landing page views","CPC (cost per link click) (IDR)","CTR (link click-through rate)","Ad delivery"\n' +
+    '"2026-09-02","2026-09-02","CBO 99","Broad-Popok","gacoan01","17469","167","16","104.6","3.48","not_delivering"\n';
+  const rows = P.extractFbAdRows(P.fbRawFromCSV(csv));
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].campaignName, 'CBO 99');
+  assert.strictEqual(rows[0].adSetName, 'Broad-Popok');
+  assert.strictEqual(rows[0].adName, 'gacoan01');
+  assert.strictEqual(rows[0].spent, 17469);
+  assert.strictEqual(rows[0].linkClicks, 167);
+  assert.strictEqual(rows[0].landingPageViews, 16);
+  assert.strictEqual(rows[0].delivery, 'inactive');
 });
 t("file campaign level (tanpa kolom Ad name) -> array kosong", () => {
   const csv = '"Reporting starts","Campaign name","Amount spent (IDR)","Link clicks"\n"2026-08-28","cp01","5000","50"\n';

@@ -67,6 +67,7 @@ function parseShopeeCSV(text) {
     toko:           col('Nama Toko'),
     barang:         col('Nama Barang') !== -1 ? col('Nama Barang') : col('Nama Barange'),
     idBarang:       col('ID Barang'),
+    idModel:        col('ID Model'),
     kategori1:      col('L1 Kategori'),
     kategori2:      col('L2 Kategori'),
     harga:          col('Harga(Rp)'),
@@ -107,8 +108,13 @@ function parseShopeeCSV(text) {
     };
 
     const orderDate = parseDate(get(CI.waktuPesan));
-    const orderHourMatch = get(CI.waktuPesan).match(/^\d{4}-\d{2}-\d{2} (\d{2})/);
-    const orderHour = orderHourMatch ? parseInt(orderHourMatch[1], 10) : null; // 0-23, buat analisis per jam
+    const waktuPesanRaw = get(CI.waktuPesan);
+    const orderHourMatch = waktuPesanRaw.match(/(?:^|\s)(\d{1,2}):\d{2}/);
+    let orderHour = null;
+    if (orderHourMatch) {
+      const h = parseInt(orderHourMatch[1], 10);
+      if (h >= 0 && h <= 23) orderHour = h; // 0-23, buat analisis per jam (support YYYY-MM-DD dan DD/MM/YYYY)
+    }
     const hasShopeeClick = get(CI.waktuKlik) !== '';  // apakah ada waktu klik Shopee
 
     rows.push({
@@ -119,6 +125,7 @@ function parseShopeeCSV(text) {
       toko:             get(CI.toko),
       barang:           get(CI.barang),
       idBarang:         get(CI.idBarang),
+      idModel:          get(CI.idModel),
       kategori1:        get(CI.kategori1),
       kategori2:        get(CI.kategori2),
       harga:            parseNum(get(CI.harga)),
@@ -151,9 +158,15 @@ function parseClickReportCSV(text) {
     const tagLink = (cells[3] || '').trim();
     const perujuk = (cells[4] || '').trim().replace(/\r/g, '');
 
-    // Extract date from waktu klik (format: YYYY-MM-DD HH:MM:SS)
-    const dateMatch = waktuKlik.match(/^(\d{4}-\d{2}-\d{2})/);
-    const date = dateMatch ? dateMatch[1] : '';
+    // Extract date from waktu klik (format: YYYY-MM-DD atau DD/MM/YYYY)
+    let date = '';
+    const mDate = waktuKlik.match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
+    if (mDate) {
+      date = `${mDate[1]}-${mDate[2]}-${mDate[3]}`;
+    } else {
+      const mDate2 = waktuKlik.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+      if (mDate2) date = `${mDate2[3]}-${mDate2[2]}-${mDate2[1]}`;
+    }
 
     // Parse tag_link segments: e.g. "MINIFOGGINGMACHINE-meta-cp03--"
     // Extract tag1 (first segment before first dash that matches a word)
@@ -167,34 +180,43 @@ function parseClickReportCSV(text) {
 
 // Map click report Tag_link to campaign key (same as resolveShopeeKey)
 function resolveClickKey(tagLink, fbNameSet, mapping) {
-  if (!tagLink) return '(tidak ada tag)';
+  let tag = String(tagLink || '').trim();
+  if (!tag || tag === '-' || tag === '--') return '(tidak ada tag)';
   // Try direct match with mapping
-  if (mapping[tagLink]) return mapping[tagLink];
-  if (fbNameSet.has(tagLink)) return tagLink;
+  if (mapping[tag]) return mapping[tag];
+  if (fbNameSet.has(tag)) return tag;
 
   // The click report Tag_link format is: TAG1-meta-TAG3-- (or TAG1-TAG1-TAG1--)
   // Commission report Tag_link1 = TAG1, Tag_link3 = TAG3
   // So we extract tag1 from click report and match
-  const parts = tagLink.split('-').filter(Boolean);
+  const parts = tag.split('-').filter(Boolean);
   const tag1 = parts[0] || '';
-  if (tag1 && mapping[tag1]) return mapping[tag1];
-  if (tag1 && fbNameSet.has(tag1)) return tag1;
+  if (tag1 && tag1 !== '-') {
+    if (mapping[tag1]) return mapping[tag1];
+    if (fbNameSet.has(tag1)) return tag1;
+  }
 
-  // Normalized match
-  const normTag = normalizeName(tagLink);
+  // Normalized match (hanya jika ada tag valid)
+  const normTag = normalizeName(tag);
   const normTag1 = normalizeName(tag1);
-  for (const name of fbNameSet) {
-    const normName = normalizeName(name);
-    if (normName === normTag || normName === normTag1) return name;
-    if (normName.includes(normTag1) || normTag1.includes(normName)) return name;
+  if (normTag || normTag1) {
+    for (const name of fbNameSet) {
+      const normName = normalizeName(name);
+      if (!normName) continue;
+      if (normTag && normName === normTag) return name;
+      if (normTag1 && normName === normTag1) return name;
+      if (normTag1 && (normName.includes(normTag1) || normTag1.includes(normName))) return name;
+    }
   }
 
   // Check existing shopee tag mapping keys
-  for (const [mKey, mVal] of Object.entries(mapping)) {
-    if (normalizeName(mKey) === normTag1 || tag1 === mKey) return mVal;
+  if (normTag1) {
+    for (const [mKey, mVal] of Object.entries(mapping)) {
+      if (normalizeName(mKey) === normTag1 || tag1 === mKey) return mVal;
+    }
   }
 
-  return tag1 || tagLink; // fallback to tag1 or full tag
+  return (tag1 && tag1 !== '-') ? tag1 : (tag !== '-' ? tag : '(tidak ada tag)'); // fallback to tag1 or full tag
 }
 
 // --- PARSE FB ADS XLSX ------------------------------------------
@@ -373,6 +395,8 @@ function extractFbRows(raw) {
       cpm:              parseNum(get(['CPM', 'BPT'])),
       ctr:              parseNum(get(['CTR (link click', 'CTR (all)', 'RKT'])),
       landingPageViews: parseNum(get(['Landing page views', 'Tampilan halaman landing'])),
+      frequency:        parseNum(get(['Frequency', 'Frekuensi'])),
+      uniqueLinkClicks: parseNum(get(['Unique link clicks', 'Klik tautan unik'])),
       budget:           parseNum(get(['Ad set budget', 'Budget', 'Anggaran'])),
       delivery:         (() => {
         const d = String(get(['Campaign delivery', 'Pengiriman kampanye', 'Delivery status', 'Status pengiriman']) || '').trim().toLowerCase();
@@ -392,8 +416,8 @@ function dedupShopeeRows(rows) {
   const out = [];
   let removed = 0;
   rows.forEach(r => {
-    const k = [r.orderId, r.status, r.date, r.toko, r.barang, r.harga, r.jumlah,
-      r.nilaiPembelian, r.komisiBersih, r.tag1, r.tag3, r.platform].join('¦');
+    const k = [r.orderId, r.idModel || '', r.status, r.date, r.toko, r.barang, r.harga, r.jumlah,
+      r.nilaiPembelian, r.komisiBersih, r.tag1, r.tag3, r.platform].join('§');
     if (seen.has(k)) { removed++; return; }
     seen.add(k);
     out.push(r);
@@ -463,9 +487,19 @@ function extractFbAdRows(raw) {
       adName,
       adSetName,
       campaignName,
-      spent:       parseSpent(get(['Amount spent', 'Jumlah yang dibelanjakan'])),
-      impressions: parseNum(get(['Impressions', 'Tayangan'])),
-      linkClicks:  fbLinkClicksOf(row, keys, get),
+      spent:            parseSpent(get(['Amount spent', 'Jumlah yang dibelanjakan'])),
+      impressions:      parseNum(get(['Impressions', 'Tayangan'])),
+      linkClicks:       fbLinkClicksOf(row, keys, get),
+      landingPageViews: parseNum(get(['Landing page views', 'Tampilan halaman landing', 'landing page views'])),
+      cpc:              parseNum(get(['CPC (cost per link click)', 'CPC (all)', 'BPK'])),
+      cpm:              parseNum(get(['CPM', 'BPT'])),
+      ctr:              parseNum(get(['CTR (link click', 'CTR (all)', 'RKT'])),
+      reach:            parseNum(get(['Reach', 'Jangkauan'])),
+      frequency:        parseNum(get(['Frequency', 'Frekuensi'])),
+      delivery:         (() => {
+        const d = String(get(['Ad delivery', 'Campaign delivery', 'Delivery status', 'Status pengiriman']) || '').trim().toLowerCase();
+        return (d.includes('not_delivering') || d.includes('inactive')) ? 'inactive' : (d || 'active');
+      })(),
     });
   }
   return out;
@@ -496,8 +530,10 @@ function synthesizeCampaignRowsFromAds(adsRows) {
 
 // --- RESOLVE SHOPEE KEY -----------------------------------------
 function resolveShopeeKey(row, fbNameSet, mapping) {
-  const tag1 = (row.tag1 || '').trim();
-  const tag3 = (row.tag3 || '').trim();
+  let tag1 = (row.tag1 || '').trim();
+  let tag3 = (row.tag3 || '').trim();
+  if (tag1 === '-' || tag1 === '--') tag1 = '';
+  if (tag3 === '-' || tag3 === '--') tag3 = '';
 
   if (tag3 && mapping[tag3]) return { key: mapping[tag3], source: 'manual' };
   if (tag1 && mapping[tag1]) return { key: mapping[tag1], source: 'manual' };
@@ -506,21 +542,27 @@ function resolveShopeeKey(row, fbNameSet, mapping) {
 
   if (tag3) {
     const normTag3 = normalizeName(tag3);
-    const match = [...fbNameSet].find(n => normalizeName(n) === normTag3);
-    if (match) return { key: match, source: 'tag3_norm' };
+    if (normTag3) {
+      const match = [...fbNameSet].find(n => normalizeName(n) === normTag3);
+      if (match) return { key: match, source: 'tag3_norm' };
+    }
   }
   if (tag1) {
     const normTag1 = normalizeName(tag1);
-    const match = [...fbNameSet].find(n => normalizeName(n) === normTag1);
-    if (match) return { key: match, source: 'tag1_norm' };
+    if (normTag1) {
+      const match = [...fbNameSet].find(n => normalizeName(n) === normTag1);
+      if (match) return { key: match, source: 'tag1_norm' };
+    }
   }
   if (tag1) {
     const normTag1 = normalizeName(tag1);
-    const match = [...fbNameSet].find(n => {
-      const normN = normalizeName(n);
-      return normN.includes(normTag1) || normTag1.includes(normN);
-    });
-    if (match) return { key: match, source: 'tag1_partial' };
+    if (normTag1) {
+      const match = [...fbNameSet].find(n => {
+        const normN = normalizeName(n);
+        return normN && (normN.includes(normTag1) || normTag1.includes(normN));
+      });
+      if (match) return { key: match, source: 'tag1_partial' };
+    }
   }
 
   if (tag3) return { key: tag3, source: 'tag3_raw' };

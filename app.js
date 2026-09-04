@@ -38,6 +38,17 @@ function isCountableOrder(r) {
   return !INVALID_ORDER_RE.test(r.status || '');
 }
 
+// Pajak / Biaya Tambahan (PPN 11%, Fee Sewa Akun Agency, Fee Payment, dsb.)
+function getTaxFeePct() {
+  const el = document.getElementById('tax-fee-input');
+  if (!el) return 0;
+  const val = parseFloat(el.value);
+  return (isNaN(val) || val < 0) ? 0 : val;
+}
+function getTaxFeeRatio() {
+  return 1 + (getTaxFeePct() / 100);
+}
+
 function showLoading(msg = 'Memproses data...') {
   document.getElementById('loading-text').textContent = msg;
   document.getElementById('loading-overlay').style.display = 'flex';
@@ -244,6 +255,28 @@ document.addEventListener('click', (ev) => {
 });
 document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') closeRangePicker(); });
 
+// --- DROPDOWN MORE MENU -----------------------------------------
+function toggleMoreMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const menu = document.getElementById('dropdown-more-menu');
+  if (!menu) return;
+  menu.style.display = (menu.style.display === 'block') ? 'none' : 'block';
+}
+
+function closeMoreMenu() {
+  const menu = document.getElementById('dropdown-more-menu');
+  if (menu) menu.style.display = 'none';
+}
+
+document.addEventListener('click', (ev) => {
+  if (!ev.target.closest('#dropdown-more-wrap')) {
+    closeMoreMenu();
+  }
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') closeMoreMenu();
+});
+
 // --- FILE UPLOAD ------------------------------------------------
 let shopeeFiles = [], fbFiles = [], clickFiles = [];
 
@@ -371,14 +404,18 @@ async function runAnalysis() {
     showLoading('Mencocokkan data...');
     await sleep(50);
 
-    const fbNameSet = new Set(state.fbCampaigns.map(c => c.campaignName));
+    const fbNameSet = new Set([
+      ...state.fbCampaigns.map(c => c.campaignName),
+      ...(state.fbAds || []).map(a => a.adName),
+      ...(state.fbAds || []).map(a => a.campaignName)
+    ].filter(Boolean));
     const savedMapping = loadMapping();
     state.mapping = { ...savedMapping };
 
     const allShopeeTags = new Set();
     state.shopeeRows.forEach(r => {
-      if (r.tag3) allShopeeTags.add(r.tag3);
-      if (r.tag1) allShopeeTags.add(r.tag1);
+      if (r.tag3 && r.tag3 !== '-') allShopeeTags.add(r.tag3);
+      if (r.tag1 && r.tag1 !== '-') allShopeeTags.add(r.tag1);
     });
 
     const fbNormMap = {};
@@ -388,9 +425,10 @@ async function runAnalysis() {
       if (state.mapping[tag]) return;
       if (fbNameSet.has(tag)) { state.mapping[tag] = tag; return; }
       const normTag = normalizeName(tag);
+      if (!normTag) return;
       if (fbNormMap[normTag]) { state.mapping[tag] = fbNormMap[normTag]; return; }
       const partial = Object.entries(fbNormMap).find(([normFb]) =>
-        normFb.includes(normTag) || normTag.includes(normFb)
+        normFb && (normFb.includes(normTag) || normTag.includes(normFb))
       );
       if (partial) state.mapping[tag] = partial[1];
     });
@@ -430,10 +468,10 @@ function showMappingModal(unmatchedTags, fbNames, showAll = false) {
   container.innerHTML = '';
 
   const modalTitle = document.querySelector('.modal-header h2');
-  if (modalTitle) modalTitle.textContent = showAll ? ' Semua Tag Shopee' : ' Mapping Campaign';
+  if (modalTitle) modalTitle.textContent = showAll ? 'Semua Tag Shopee' : 'Mapping Campaign';
 
   if (unmatchedTags.length === 0) {
-    container.innerHTML = '<p style="color:#64748b;text-align:center;padding:20px">Semua tag sudah terpetakan otomatis </p>';
+    container.innerHTML = '<p style="color:#64748b;text-align:center;padding:20px">Semua tag sudah terpetakan otomatis</p>';
     document.getElementById('mapping-modal').style.display = 'flex';
     return;
   }
@@ -442,7 +480,7 @@ function showMappingModal(unmatchedTags, fbNames, showAll = false) {
     const currentMap = state.mapping[tag];
     const row = document.createElement('div');
     row.className = 'mapping-row';
-    const autoLabel = currentMap ? `<span style="font-size:11px;color:#10b981;margin-left:6px"> auto</span>` : '';
+    const autoLabel = currentMap ? `<span style="font-size:11px;color:#10b981;margin-left:6px">auto</span>` : '';
     const options = ['- Tidak Dipetakan -', ...fbNames].map(n =>
       `<option value="${esc(n)}" ${currentMap === n ? 'selected' : ''}>${esc(n)}</option>`
     ).join('');
@@ -462,6 +500,8 @@ function applyMapping() {
     const val = sel.value;
     if (val && !val.includes('Tidak Dipetakan')) {
       state.mapping[tag] = val;
+    } else {
+      delete state.mapping[tag];
     }
   });
   saveMapping(state.mapping);
@@ -475,11 +515,14 @@ function skipMapping() {
 }
 
 function openMapping() {
-  const fbNameSet = new Set(state.fbCampaigns.map(c => c.campaignName));
+  const fbNameSet = new Set([
+    ...state.fbCampaigns.map(c => c.campaignName),
+    ...(state.fbAds || []).map(a => a.adName)
+  ].filter(Boolean));
   const allTags = new Set();
   state.shopeeRows.forEach(r => {
-    if (r.tag3) allTags.add(r.tag3);
-    if (r.tag1) allTags.add(r.tag1);
+    if (r.tag3 && r.tag3 !== '-') allTags.add(r.tag3);
+    if (r.tag1 && r.tag1 !== '-') allTags.add(r.tag1);
   });
   showMappingModal([...allTags], [...fbNameSet], true);
 }
@@ -522,9 +565,9 @@ async function saveSession() {
       fbAds: state.fbAds,
       clickReport: state.clickReport,
       mapping: state.mapping,
-      filterStart: document.getElementById('filter-start').value,
-      filterEnd: document.getElementById('filter-end').value,
-      ppn: document.getElementById('ppn-toggle').checked,
+      filterStart: document.getElementById('filter-start')?.value || '',
+      filterEnd: document.getElementById('filter-end')?.value || '',
+      taxFee: getTaxFeePct(),
       validOrders: document.getElementById('valid-orders-toggle')?.checked !== false,
     };
     db.transaction('session', 'readwrite').objectStore('session').put(data, 'current');
@@ -555,14 +598,11 @@ async function checkResume() {
     state.history.sort((a, b) => (a.end || '').localeCompare(b.end || ''));
     const s = await loadSession();
     if (!s || !s.shopeeRows || !s.shopeeRows.length) return;
-    const dates = s.shopeeRows.map(r => r.date).filter(Boolean).sort();
-    const range = dates.length ? `${dates[0]} s/d ${dates[dates.length - 1]}` : 'tanpa data Shopee';
-    document.getElementById('resume-text').innerHTML =
-      `Sesi sebelumnya ditemukan (disimpan ${new Date(s.savedAt).toLocaleString('id-ID')}):` +
-      `<br><strong>${fmt(s.shopeeRows.length)}</strong> baris komisi Shopee · <strong>${s.fbCampaigns.length}</strong> baris FB Ads · <strong>${s.clickReport.length}</strong> klik · ${range}` +
-      `<br><span style="font-size:12px;color:#94a3b8">Tersimpan lokal di browser ini — tidak ada data yang dikirim ke internet.</span>`;
-    document.getElementById('resume-banner').style.display = 'flex';
-  } catch (e) {}
+    // Otomatis pulihkan sesi terakhir agar data langsung tampil tanpa perlu klik banner
+    await restoreSession();
+  } catch (e) {
+    console.warn('checkResume error:', e);
+  }
 }
 
 async function restoreSession() {
@@ -578,7 +618,10 @@ async function restoreSession() {
   state.mapping = s.mapping || {};
   state.sessionStale = s.parserVersion !== PARSER_VERSION; // sesi dari parser lama = fitur baru butuh data segar
   setRange(s.filterStart || '', s.filterEnd || '');
-  document.getElementById('ppn-toggle').checked = !!s.ppn;
+  const feeInput = document.getElementById('tax-fee-input');
+  if (feeInput) {
+    feeInput.value = s.taxFee !== undefined ? s.taxFee : (s.ppn ? 11 : 0);
+  }
   const vo = document.getElementById('valid-orders-toggle');
   if (vo) vo.checked = s.validOrders !== false;
   dismissResume();
@@ -664,11 +707,14 @@ function backupData() {
       mapping: loadMapping(),
     };
     const ses = {
+      savedAt: Date.now(),
+      parserVersion: PARSER_VERSION,
       shopeeRows: state.shopeeRows, fbCampaigns: state.fbCampaigns,
-      fbBreakdown: state.fbBreakdown, clickReport: state.clickReport,
-      filterStart: document.getElementById('filter-start').value,
-      filterEnd: document.getElementById('filter-end').value,
-      ppn: document.getElementById('ppn-toggle').checked,
+      fbBreakdown: state.fbBreakdown, fbAds: state.fbAds || [], clickReport: state.clickReport,
+      filterStart: document.getElementById('filter-start')?.value || '',
+      filterEnd: document.getElementById('filter-end')?.value || '',
+      taxFee: getTaxFeePct(),
+      ppn: getTaxFeePct() > 0,
       validOrders: document.getElementById('valid-orders-toggle')?.checked !== false,
     };
     if (ses.shopeeRows.length || ses.fbCampaigns.length || ses.clickReport.length) bundle.session = ses;
@@ -715,12 +761,24 @@ checkResume();
 function buildDashboard(opts = {}) {
   showLoading('Membangun dashboard...');
 
-  if (!opts.keepFilters) {
-    const dates = state.shopeeRows.map(r => r.date).filter(Boolean).sort();
-    if (dates.length > 0) {
-      setRange(dates[0], dates[dates.length - 1]);
-      document.getElementById('last-updated').textContent =
-        `Data: ${dates[0]} - ${dates[dates.length - 1]}`;
+  const allDates = [
+    ...state.shopeeRows.map(r => r.date),
+    ...state.fbCampaigns.map(c => c.date),
+    ...(state.fbAds || []).map(a => a.date),
+  ].filter(Boolean).sort();
+
+  const minDate = allDates[0] || '';
+  const maxDate = allDates[allDates.length - 1] || '';
+
+  const curStart = document.getElementById('filter-start')?.value || '';
+  const curEnd   = document.getElementById('filter-end')?.value || '';
+
+  // Jika tidak minta keepFilters, atau filter saat ini kosong / di luar rentang tanggal data baru:
+  const isOutOfRange = !curStart || !curEnd || (minDate && curEnd < minDate) || (maxDate && curStart > maxDate);
+
+  if (!opts.keepFilters || isOutOfRange) {
+    if (minDate && maxDate) {
+      setRange(minDate, maxDate);
     }
   }
 
@@ -728,6 +786,7 @@ function buildDashboard(opts = {}) {
     applyFilters();
     document.getElementById('section-upload').style.display = 'none';
     document.getElementById('section-dashboard').style.display = 'block';
+    setupSectionNavObserver();
     hideLoading();
   }, 100);
 }
@@ -749,18 +808,13 @@ function normDateInput(val) {
 }
 
 function applyFilters() {
-  const rawStart = document.getElementById('filter-start').value;
-  const rawEnd   = document.getElementById('filter-end').value;
+  const rawStart = document.getElementById('filter-start')?.value || '';
+  const rawEnd   = document.getElementById('filter-end')?.value || '';
   const start = normDateInput(rawStart);
   const end   = normDateInput(rawEnd);
 
   console.log('[Filter] start:', JSON.stringify(start), 'end:', JSON.stringify(end));
   console.log('[Filter] total rows:', state.shopeeRows.length);
-
-  if (start || end) {
-    const label = (start || '...') + '  ' + (end || '...');
-    document.getElementById('last-updated').textContent = 'Data: ' + label;
-  }
 
   state.filteredShopee = state.shopeeRows.filter(r => {
     if (!r.date) return true;
@@ -818,6 +872,20 @@ function applyFilters() {
     if (end   && c.date > end)   return false;
     return true;
   });
+  // Safety guard: jika ada data Shopee tapi hasil filter 0 baris (karena filter tanggal basi/di luar rentang data baru)
+  if (state.shopeeRows.length > 0 && state.filteredShopee.length === 0) {
+    console.warn('[Filter] Filter tanggal basi (0 baris ditemukan). Me-reset otomatis ke seluruh rentang data.');
+    const allDates = [...new Set(state.shopeeRows.map(r => r.date).filter(Boolean))].sort();
+    if (allDates.length > 0) {
+      setRange(allDates[0], allDates[allDates.length - 1]);
+      state.filteredShopee = state.shopeeRows;
+      state.filteredFb = state.fbCampaigns;
+      state.filteredFbAds = state.fbAds;
+      state.filteredClicks = state.clickReport;
+      state.dateRatio = 1;
+    }
+  }
+
   console.log('[Filter] dateRatio:', state.dateRatio.toFixed(3), 'fbHasDates:', fbHasDates, 'clicks:', state.filteredClicks.length);
   renderAll();
   saveSession();
@@ -829,138 +897,97 @@ function renderAll() {
   try { renderKPIs(); } catch(e) { console.warn('renderKPIs:', e); }
   try { renderCampaignTab(); } catch(e) { console.warn('renderCampaignTab:', e); }
   try { renderProductTab(); } catch(e) { console.warn('renderProductTab:', e); }
-  try { renderComparisonTab(); } catch(e) { console.warn('renderComparisonTab:', e); }
   try { renderTrendTab(); } catch(e) { console.warn('renderTrendTab:', e); }
   try { renderClickInsights(); } catch(e) { console.warn('renderClickInsights:', e); }
-  try { renderFbBreakdown(); } catch(e) { console.warn('renderFbBreakdown:', e); }
   try { renderSanity(); } catch(e) { console.warn('renderSanity:', e); }
   try { renderRoasJourney(); } catch(e) { console.warn('renderRoasJourney:', e); }
 }
 
-// --- MERGE SHOPEE + FB ------------------------------------------
-function buildCampaignData() {
-  const fbNameSet = new Set(state.filteredFb.map(c => c.campaignName));
+// --- TAG HELPER FOR ADS ----------------------------------------
+function tagForAd(adName, knownTags = null) {
+  if (!adName) return null;
+  const lower = String(adName).toLowerCase();
+  const nAd = normalizeName(adName);
+  const tags = knownTags || [...new Set([
+    ...state.shopeeRows.map(r => (r.tag1 || '').trim()),
+    ...state.shopeeRows.map(r => (r.tag3 || '').trim()),
+    ...state.clickReport.map(c => (c.tag1 || c.tagLink || '').trim()),
+  ])].filter(t => t && t !== '-' && t !== '--');
 
-  // Aggregate click report data by campaign key
-  const clicksByTag = {};
-  (state.filteredClicks || []).forEach(click => {
-    const key = resolveClickKey(click.tagLink, fbNameSet, state.mapping);
-    if (!clicksByTag[key]) clicksByTag[key] = { total: 0, fromFacebook: 0, fromOthers: 0 };
-    clicksByTag[key].total++;
-    if (click.perujuk === 'Facebook') clicksByTag[key].fromFacebook++;
-    else clicksByTag[key].fromOthers++;
-  });
-
-  const shopeeByTag = {};
-  state.filteredShopee.forEach(r => {
-    const { key } = resolveShopeeKey(r, fbNameSet, state.mapping);
-    if (!shopeeByTag[key]) shopeeByTag[key] = [];
-    shopeeByTag[key].push(r);
-  });
-
-  const allCampaigns = new Set([
-    ...Object.keys(shopeeByTag),
-    ...Object.keys(clicksByTag),
-    ...state.filteredFb.map(c => c.campaignName)
-  ]);
-
-  const result = [];
-  allCampaigns.forEach(name => {
-    const ppnToggle = document.getElementById('ppn-toggle');
-    const ppnRatio = (ppnToggle && ppnToggle.checked) ? 1.11 : 1;
-    const shopeeRows = shopeeByTag[name] || [];
-    // Aggregate FB rows (in case it's daily data with multiple rows per campaign)
-    const fbRows = state.filteredFb.filter(c => c.campaignName === name);
-    let fbRow = null;
-    if (fbRows.length > 0) {
-      fbRow = fbRows.reduce((acc, row) => ({
-        campaignName: name,
-        spent: acc.spent + (row.spent || 0),
-        reach: acc.reach + (row.reach || 0),
-        impressions: acc.impressions + (row.impressions || 0),
-        linkClicks: acc.linkClicks + (row.linkClicks || 0),
-        allClicks: acc.allClicks + (row.allClicks || 0),
-        landingPageViews: acc.landingPageViews + (row.landingPageViews || 0),
-      }), { spent: 0, reach: 0, impressions: 0, linkClicks: 0, allClicks: 0, landingPageViews: 0 });
-      
-      // Apply PPN 11% to FB spend immediately so cpc and cpm are calculated with tax included
-      fbRow.spent = fbRow.spent * ppnRatio;
-      
-      fbRow.ctr = fbRow.impressions > 0 ? (fbRow.linkClicks / fbRow.impressions) * 100 : 0;
-      fbRow.cpc = fbRow.linkClicks > 0 ? fbRow.spent / fbRow.linkClicks : 0;
-      fbRow.cpm = fbRow.impressions > 0 ? (fbRow.spent / fbRow.impressions) * 1000 : 0;
+  let best = null;
+  for (const t of tags) {
+    const lt = t.toLowerCase();
+    const nT = normalizeName(t);
+    if (!nT) continue;
+    let hit = false;
+    const i = lower.indexOf(lt);
+    if (i >= 0 && !/\d/.test(lower.charAt(i + lt.length))) hit = true;
+    if (!hit) {
+      const j = nAd.indexOf(nT);
+      if (j >= 0 && !/\d/.test(nAd.charAt(j + nT.length))) hit = true;
     }
+    if (hit && (!best || lt.length > best.length)) best = t;
+  }
+  return best;
+}
 
-    const countableRows = shopeeRows.filter(isCountableOrder);
-    const uniqueOrders = new Set(countableRows.map(r => r.orderId));
-    const orders = uniqueOrders.size;
-    const komisi = shopeeRows.reduce((s, r) => s + r.komisiBersih, 0);
-    const nilaiPembelian = shopeeRows.reduce((s, r) => s + r.nilaiPembelian, 0);
-    // Apply dateRatio to prorate FB metrics when date range is filtered
-    const ratio = state.dateRatio !== undefined ? state.dateRatio : 1;
-
-    const spent = fbRow ? fbRow.spent * ratio : 0;
-    const profit = komisi - spent;
-    const roas = spent > 0 ? komisi / spent : null;
-    const cpo = orders > 0 && spent > 0 ? spent / orders : null;
-
-    const statusCount = {};
-    shopeeRows.forEach(r => {
-      statusCount[r.status] = (statusCount[r.status] || 0) + 1;
-    });
-
-    // === FUNNEL 3 TAHAP (dengan data klik Shopee asli) ===
-    // Stage 1: Klik Iklan (FB Link Clicks)
-    const fbLinkClicks = fbRow ? Math.round(fbRow.linkClicks * ratio) : 0;
-    // Stage 2: Klik Masuk Shopee (dari Website Click Report jika tersedia, fallback ke LPV)
-    const clickData = clicksByTag[name] || null;
-    const shopeeClicks = clickData ? clickData.total : 0;
-    const shopeeClicksFb = clickData ? clickData.fromFacebook : 0;
-    const shopeeClicksOthers = clickData ? clickData.fromOthers : 0;
-    const landingViews = fbRow ? Math.round(fbRow.landingPageViews * ratio) : 0;
-    // Use real click data if available — prioritas klik perujuk Facebook (konteks funnel iklan),
-    // fallback ke total klik kalau tidak ada yang berujuk FB, terakhir ke LPV
-    const stage2Value = clickData ? (shopeeClicksFb > 0 ? shopeeClicksFb : shopeeClicks) : landingViews;
-    const stage2Source = clickData ? 'click_report' : 'lpv';
-    // Stage 3: Yang Order (unique orders dari Shopee)
-    // orders sudah dihitung di atas
-
-    // Drop-off metrics
-    const dropClickToShopee = fbLinkClicks > 0 ? Math.max(0, fbLinkClicks - stage2Value) : null;
-    const dropClickToShopeePct = fbLinkClicks > 0 ? ((fbLinkClicks - stage2Value) / fbLinkClicks * 100) : null;
-    const dropShopeeToOrder = stage2Value > 0 ? Math.max(0, stage2Value - orders) : null;
-    const dropShopeeToOrderPct = stage2Value > 0 ? ((stage2Value - orders) / stage2Value * 100) : null;
-    const overallConvPct = fbLinkClicks > 0 ? (orders / fbLinkClicks * 100) : null;
-
-    // New metrics
-    const cpcShopee = stage2Value > 0 && spent > 0 ? spent / stage2Value : null; // CPC Shopee = spend / klik masuk
-    const komisiPerOrder = orders > 0 ? komisi / orders : null; // Affiliate per pesanan
-
-    result.push({ name, shopeeRows, orders, komisi, nilaiPembelian, spent, profit, roas, cpo, statusCount,
-      fbLinkClicks, landingViews, shopeeClicks, shopeeClicksFb, shopeeClicksOthers,
-      stage2Value, stage2Source,
-      dropClickToShopee, dropClickToShopeePct,
-      dropShopeeToOrder, dropShopeeToOrderPct, overallConvPct,
-      cpcShopee, komisiPerOrder,
-      fb: fbRow || null });
-  });
-
-  return result.sort((a, b) => (b.roas || -Infinity) - (a.roas || -Infinity));
+// --- MERGE SHOPEE + FB (UNIFIED AUTHORITATIVE PIPELINE) ---------
+function buildCampaignData() {
+  const masterRows = computeMasterTableRows();
+  return masterRows.map(r => ({
+    name: r.adDisplay !== '-' ? r.adDisplay : r.campaignDisplay,
+    campaignName: r.campaignDisplay,
+    adSetName: r.adSetDisplay,
+    spent: r.spent,
+    komisi: r.komisi,
+    orders: r.orders,
+    profit: r.profit,
+    roas: r.roas,
+    cpo: r.cpo,
+    fbLinkClicks: r.linkClicks,
+    stage2Value: r.shopeeClicks,
+    dropClickToShopeePct: r.dropPct,
+    dropClickToShopee: (r.linkClicks > 0 && r.shopeeClicks !== null) ? Math.max(0, r.linkClicks - r.shopeeClicks) : 0,
+    cpcShopee: r.realCpc,
+    komisiPerOrder: r.orders > 0 ? (r.komisi / r.orders) : null,
+    fb: {
+      spent: r.spent,
+      linkClicks: r.linkClicks,
+      cpc: r.cpcFb,
+      delivery: r.delivery,
+      ctr: r.linkClicks > 0 && r.impressions > 0 ? (r.linkClicks / r.impressions) * 100 : 0,
+    }
+  }));
 }
 
 // --- KPIs -------------------------------------------------------
 function renderKPIs() {
-  const campaigns = buildCampaignData();
-  const totalSpent  = campaigns.reduce((s, c) => s + c.spent, 0);
-  const totalKomisi = campaigns.reduce((s, c) => s + c.komisi, 0);
-  const totalOrders = new Set(state.filteredShopee.filter(isCountableOrder).map(r => r.orderId)).size;
-  const totalProfit = totalKomisi - totalSpent;
-  const overallRoas = totalSpent > 0 ? totalKomisi / totalSpent : null;
+  const feePct = getTaxFeePct();
+  const feeRatio = getTaxFeeRatio();
+  const isCountable = r => isCountableOrder(r);
+
+  // Sumber kebenaran Shopee:
+  const activeShopee = state.filteredShopee || [];
+  const countableRows = activeShopee.filter(isCountable);
+  const totalOrders = new Set(countableRows.map(r => r.orderId)).size;
+  const totalKomisi = Math.round(activeShopee.reduce((s, r) => s + (r.komisiBersih || 0), 0));
+
+  // Sumber kebenaran FB Spend:
+  let rawSpend = 0;
+  if (state.filteredFbAds && state.filteredFbAds.length > 0) {
+    rawSpend = state.filteredFbAds.reduce((s, a) => s + (a.spent || 0), 0);
+  } else if (state.filteredFb && state.filteredFb.length > 0) {
+    rawSpend = state.filteredFb.reduce((s, c) => s + (c.spent || 0), 0) * (state.dateRatio || 1);
+  }
+  const totalSpent = Math.round(rawSpend * feeRatio);
+
+  const totalProfit = Math.round(totalKomisi - totalSpent);
+  const overallRoas = totalSpent > 0 ? (totalKomisi / totalSpent) : null;
 
   const kpis = [
-    { label: 'Total Komisi Bersih', value: 'Rp ' + fmtK(totalKomisi), count: totalKomisi, format: 'rupiah', sub: 'dari semua campaign', color: 'green',
+    { label: 'Total Komisi Bersih', value: 'Rp ' + fmtK(totalKomisi), count: totalKomisi, format: 'rupiah', sub: 'dari semua order Shopee', color: 'green',
       badge: totalProfit >= 0 ? { text: 'Untung', cls: 'pos' } : { text: 'Rugi', cls: 'neg' } },
-    { label: 'Total Spend Iklan', value: 'Rp ' + fmtK(totalSpent), count: totalSpent, format: 'rupiah', sub: 'Facebook Ads', color: 'orange' },
+    { label: 'Total Spend Iklan', value: 'Rp ' + fmtK(totalSpent), count: totalSpent, format: 'rupiah', sub: feePct > 0 ? `Meta Ads (+${feePct}% Fee/Pajak)` : 'Meta Ads (tanpa fee/pajak)', color: 'orange' },
     { label: 'Profit / Loss', value: (totalProfit >= 0 ? 'Rp ' : '-Rp ') + fmtK(Math.abs(totalProfit)),
       count: totalProfit, format: 'rupiah',
       sub: totalProfit >= 0 ? '▲ profit' : '▼ rugi',
@@ -969,7 +996,7 @@ function renderKPIs() {
         ? { text: '+' + fmtK(totalProfit), cls: 'pos' }
         : { text: '-' + fmtK(Math.abs(totalProfit)), cls: 'neg' }
     },
-    { label: 'Overall ROAS', value: fmtRoas(overallRoas), count: overallRoas !== null && overallRoas !== undefined ? overallRoas : '', format: 'roas', sub: 'komisi / spend', color: overallRoas && overallRoas >= 2 ? 'green' : 'orange' },
+    { label: 'Overall ROAS', value: fmtRoas(overallRoas), count: overallRoas !== null && overallRoas !== undefined ? overallRoas : '', format: 'roas', sub: 'komisi / spend', color: overallRoas && overallRoas >= 2 ? 'green' : (overallRoas && overallRoas >= 1 ? 'blue' : 'orange') },
     { label: 'Total Pesanan', value: fmt(totalOrders), count: totalOrders, format: 'plain', sub: 'unique order valid', color: 'blue' },
   ];
 
@@ -1067,105 +1094,606 @@ function renderSmartReport() {
       <div class="sr-item"><div class="sr-label">💸 Iklan</div>
         Spend <strong>Rp ${fmt(totalSpent)}</strong> dalam <strong>${days} hari</strong>${profit < 0 ? ' · defisit <strong>-Rp ' + fmt(Math.abs(profit)) + '</strong>' : ''}
         <div style="font-size:12px;color:#64748b">GMV Shopee: Rp ${fmtK(state.filteredShopee.reduce((s, r) => s + r.nilaiPembelian, 0))}</div></div>
-      ${best && best.roas >= 1 ? `<div class="sr-item"><div class="sr-label">🚀 Pertahankan & scale</div>
+      ${best && best.roas >= 1 ? `<div class="sr-item"><div class="sr-label">🏆 Performa ROAS Tertinggi</div>
         <strong>${esc(best.name)}</strong> — ROAS ${best.roas.toFixed(2)}x · komisi Rp ${fmt(best.komisi)}</div>` : ''}
-      ${worst && worst.roas !== null && worst.roas < 1 ? `<div class="sr-item"><div class="sr-label">⛔ Kandidat pause</div>
+      ${worst && worst.roas !== null && worst.roas < 1 ? `<div class="sr-item"><div class="sr-label">⚠️ Defisit Terbesar</div>
         <strong>${esc(worst.name)}</strong> — ROAS ${worst.roas.toFixed(2)}x · rugi -Rp ${fmt(Math.abs(worst.profit))}${worstBep ? ' · ' + worstBep : ''}</div>` : ''}
       ${worstFunnel ? `<div class="sr-item"><div class="sr-label">🔍 Klik bocor terparah</div>
         <strong>${esc(worstFunnel.name)}</strong> — ${worstFunnel.dropClickToShopeePct.toFixed(0)}% klik tidak sampai ke Shopee (${fmt(worstFunnel.dropClickToShopee)} klik hilang)</div>` : ''}
     </div>`;
 }
 
-// --- CAMPAIGN TAB -----------------------------------------------
-function renderCampaignTab() {
-  const campaigns = buildCampaignData();
+// --- GUIDE & TUTORIAL & LIKE MODALS -----------------------------
+function openGuideModal() {
+  const m = document.getElementById('guide-modal');
+  if (m) m.style.display = 'flex';
+}
+function closeGuideModal() {
+  const m = document.getElementById('guide-modal');
+  if (m) m.style.display = 'none';
+}
 
-  destroyChart('roas');
-  const ctxRoas = document.getElementById('chart-roas');
-  if (ctxRoas) {
-    const canvas = ensureCanvas(ctxRoas);
-    const labels   = campaigns.map(c => c.name);
-    const roasVals = campaigns.map(c => c.roas !== null ? +c.roas.toFixed(2) : 0);
-    const colors   = roasVals.map(v => v >= 2 ? '#10b981' : v >= 1 ? '#f59e0b' : '#ef4444');
-    state.charts['roas'] = new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: 'ROAS', data: roasVals, backgroundColor: colors, borderRadius: 6 },
-          { label: 'Break-even (1x)', data: labels.map(() => 1), type: 'line',
-            borderColor: '#94a3b8', borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false,
-            datalabels: { display: false } }
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top' },
-          tooltip: { callbacks: {
-            label: (ctx) => ctx.dataset.label === 'ROAS' ? `ROAS: ${ctx.raw}x` : 'Break-even'
-          }},
-          datalabels: { display: true, anchor: 'end', align: 'end', offset: -2, color: dlColor(),
-            font: { weight: 700, size: 10 }, formatter: (v) => v ? v.toFixed(2) + 'x' : '' }
-        },
-        scales: { y: { beginAtZero: true, suggestedMax: 1.2, title: { display: true, text: 'ROAS (x)' } } }
+function openLikeModal() {
+  const m = document.getElementById('like-modal');
+  if (m) m.style.display = 'flex';
+}
+function closeLikeModal() {
+  const m = document.getElementById('like-modal');
+  if (m) m.style.display = 'none';
+}
+function submitPrayer() {
+  closeLikeModal();
+  showToast('🤲 Jazakallahu khairan! Terima kasih banyak atas doa tulusnya.');
+}
+
+function openTutorialModal() {
+  const m = document.getElementById('tutorial-modal');
+  if (m) m.style.display = 'flex';
+}
+function closeTutorialModal() {
+  const m = document.getElementById('tutorial-modal');
+  if (m) m.style.display = 'none';
+}
+function switchTutTab(tabId, btn) {
+  document.querySelectorAll('.tut-pane').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('.tut-tab-btn').forEach(b => b.classList.remove('active'));
+  const target = document.getElementById(tabId);
+  if (target) target.style.display = 'block';
+  if (btn) btn.classList.add('active');
+}
+
+// --- MASTER DECISION TABLE ROWS ---------------------------------
+function computeMasterTableRows() {
+  const feeRatio = getTaxFeeRatio();
+  const hasAds = state.filteredFbAds && state.filteredFbAds.length > 0;
+
+  // 1. Kumpulkan penjualan per Tag dari data Shopee
+  const salesByTag = {};
+  (state.filteredShopee || []).forEach(r => {
+    let tag = (r.tag1 || '').trim();
+    if (!tag || tag === '-' || tag === '--') tag = (r.tag3 || '').trim();
+    if (!tag || tag === '-' || tag === '--') tag = '(tanpa tag)';
+    if (!salesByTag[tag]) salesByTag[tag] = { orders: new Set(), komisi: 0 };
+    if (isCountableOrder(r)) salesByTag[tag].orders.add(r.orderId);
+    salesByTag[tag].komisi += (r.komisiBersih || 0);
+  });
+
+  // 2. Kumpulkan klik Shopee per Tag dari Click Report
+  const clicksByTag = {};
+  (state.filteredClicks || []).forEach(c => {
+    const t = (c.tag1 || c.tagLink || '').trim();
+    if (t && t !== '-' && t !== '--') {
+      if (!clicksByTag[t]) clicksByTag[t] = { total: 0, fromFacebook: 0 };
+      clicksByTag[t].total++;
+      if (c.perujuk === 'Facebook') clicksByTag[t].fromFacebook++;
+    }
+  });
+
+  const allTags = [...new Set([...Object.keys(salesByTag), ...Object.keys(clicksByTag)])];
+
+  if (hasAds) {
+    // Agregasi ad-level
+    const byAd = {};
+    state.filteredFbAds.forEach(a => {
+      const k = a.adName || '(tanpa nama)';
+      if (!byAd[k]) {
+        byAd[k] = {
+          adName: a.adName || '-',
+          adSetName: a.adSetName || '-',
+          campaignName: a.campaignName || '-',
+          spent: 0,
+          linkClicks: 0,
+          landingPageViews: 0,
+          delivery: a.delivery || '',
+        };
+      }
+      byAd[k].spent += (a.spent || 0);
+      byAd[k].linkClicks += (a.linkClicks || 0);
+      byAd[k].landingPageViews += (a.landingPageViews || 0);
+      if (a.delivery) byAd[k].delivery = a.delivery;
+    });
+
+    const adToTag = {};
+    const boundTags = new Set();
+
+    // Pass 1: Manual Mapping
+    Object.keys(byAd).forEach(adName => {
+      if (state.mapping && state.mapping[adName] && salesByTag[state.mapping[adName]]) {
+        adToTag[adName] = state.mapping[adName];
+        boundTags.add(state.mapping[adName]);
       }
     });
+
+    // Pass 2: Exact Match (prioritas tertinggi)
+    Object.keys(byAd).forEach(adName => {
+      if (adToTag[adName]) return;
+      const exact = allTags.find(t => t.toLowerCase() === adName.toLowerCase());
+      if (exact && !boundTags.has(exact)) {
+        adToTag[adName] = exact;
+        boundTags.add(exact);
+      }
+    });
+
+    // Pass 3: Prefix Match (hanya untuk ad & tag yang belum terikat, mencegah komisi terhitung ganda)
+    Object.keys(byAd).forEach(adName => {
+      if (adToTag[adName]) return;
+      const lower = adName.toLowerCase();
+      const nAd = normalizeName(adName);
+      for (const t of allTags) {
+        if (boundTags.has(t)) continue;
+        const lt = t.toLowerCase();
+        const nT = normalizeName(t);
+        if (!nT) continue;
+        let hit = false;
+        const i = lower.indexOf(lt);
+        if (i >= 0 && !/\d/.test(lower.charAt(i + lt.length))) hit = true;
+        if (!hit) {
+          const j = nAd.indexOf(nT);
+          if (j >= 0 && !/\d/.test(nAd.charAt(j + nT.length))) hit = true;
+        }
+        if (hit) {
+          adToTag[adName] = t;
+          boundTags.add(t);
+          break;
+        }
+      }
+    });
+
+    const rows = Object.values(byAd).map(a => {
+      const tag = adToTag[a.adName] || null;
+      const sale = tag ? salesByTag[tag] : null;
+      const orders = sale ? sale.orders.size : 0;
+      const komisi = sale ? sale.komisi : 0;
+      const spent = Math.round(a.spent * feeRatio);
+      const profit = Math.round(komisi - spent);
+      const roas = spent > 0 ? (komisi / spent) : null;
+      const cpo = (spent > 0 && orders > 0) ? Math.round(spent / orders) : null;
+
+      const cData = tag ? (clicksByTag[tag] || null) : null;
+      const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : a.landingPageViews;
+      const dropPct = (a.linkClicks > 0 && shopeeClicks !== null)
+        ? Math.max(0, ((a.linkClicks - shopeeClicks) / a.linkClicks * 100))
+        : null;
+      const cpcFb = (a.linkClicks > 0 && spent > 0) ? Math.round(spent / a.linkClicks) : null;
+      const realCpc = (shopeeClicks > 0 && spent > 0) ? Math.round(spent / shopeeClicks) : null;
+
+      return {
+        campaignDisplay: a.campaignName,
+        adSetDisplay: a.adSetName,
+        adDisplay: a.adName,
+        tagDisplay: tag || '-',
+        spent,
+        linkClicks: a.linkClicks,
+        shopeeClicks,
+        dropPct,
+        cpcFb,
+        realCpc,
+        orders,
+        komisi: Math.round(komisi),
+        profit,
+        roas,
+        cpo,
+        delivery: a.delivery,
+      };
+    });
+
+    // Tambahkan penjualan Shopee yang tidak terafiliasi ke Iklan FB (Organik / Tag Bebas)
+    allTags.forEach(tag => {
+      if (!boundTags.has(tag) && salesByTag[tag] && salesByTag[tag].komisi > 0) {
+        const sale = salesByTag[tag];
+        const cData = clicksByTag[tag] || null;
+        const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : 0;
+        rows.push({
+          campaignDisplay: 'Organik / Tanpa Iklan FB',
+          adSetDisplay: '-',
+          adDisplay: '(Organik) ' + tag,
+          tagDisplay: tag,
+          spent: 0,
+          linkClicks: 0,
+          shopeeClicks,
+          dropPct: null,
+          cpcFb: null,
+          realCpc: null,
+          orders: sale.orders.size,
+          komisi: Math.round(sale.komisi),
+          profit: Math.round(sale.komisi),
+          roas: null,
+          cpo: null,
+          delivery: 'organic',
+        });
+      }
+    });
+
+    return rows.sort((a, b) => {
+      // Default Sort: Spend (Rp) terbesar (Standar Meta Ads Manager), lalu Komisi / Klik
+      if ((b.spent || 0) !== (a.spent || 0)) {
+        return (b.spent || 0) - (a.spent || 0);
+      }
+      if ((b.komisi || 0) !== (a.komisi || 0)) {
+        return (b.komisi || 0) - (a.komisi || 0);
+      }
+      return (b.linkClicks || 0) - (a.linkClicks || 0);
+    });
+  } else {
+    // Campaign level handling
+    const byCamp = {};
+    (state.filteredFb || []).forEach(c => {
+      const k = c.campaignName || '(tanpa nama)';
+      if (!byCamp[k]) {
+        byCamp[k] = { campaignName: k, spent: 0, linkClicks: 0, landingPageViews: 0, delivery: c.delivery || '' };
+      }
+      byCamp[k].spent += (c.spent || 0);
+      byCamp[k].linkClicks += (c.linkClicks || 0);
+      byCamp[k].landingPageViews += (c.landingPageViews || 0);
+    });
+
+    const campToTag = {};
+    const boundTags = new Set();
+    Object.keys(byCamp).forEach(cn => {
+      if (state.mapping && state.mapping[cn] && salesByTag[state.mapping[cn]]) {
+        campToTag[cn] = state.mapping[cn];
+        boundTags.add(state.mapping[cn]);
+      }
+    });
+    Object.keys(byCamp).forEach(cn => {
+      if (campToTag[cn]) return;
+      const exact = allTags.find(t => t.toLowerCase() === cn.toLowerCase());
+      if (exact && !boundTags.has(exact)) {
+        campToTag[cn] = exact;
+        boundTags.add(exact);
+      }
+    });
+    Object.keys(byCamp).forEach(cn => {
+      if (campToTag[cn]) return;
+      const lower = cn.toLowerCase();
+      for (const t of allTags) {
+        if (boundTags.has(t)) continue;
+        if (lower.includes(t.toLowerCase())) {
+          campToTag[cn] = t;
+          boundTags.add(t);
+          break;
+        }
+      }
+    });
+
+    const rows = Object.values(byCamp).map(c => {
+      const tag = campToTag[c.campaignName] || null;
+      const sale = tag ? salesByTag[tag] : null;
+      const orders = sale ? sale.orders.size : 0;
+      const komisi = sale ? sale.komisi : 0;
+      const spent = Math.round(c.spent * feeRatio * (state.dateRatio || 1));
+      const profit = Math.round(komisi - spent);
+      const roas = spent > 0 ? (komisi / spent) : null;
+      const cpo = (spent > 0 && orders > 0) ? Math.round(spent / orders) : null;
+
+      const cData = tag ? (clicksByTag[tag] || null) : null;
+      const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : c.landingPageViews;
+      const dropPct = (c.linkClicks > 0 && shopeeClicks !== null)
+        ? Math.max(0, ((c.linkClicks - shopeeClicks) / c.linkClicks * 100))
+        : null;
+      const cpcFb = (c.linkClicks > 0 && spent > 0) ? Math.round(spent / c.linkClicks) : null;
+      const realCpc = (shopeeClicks > 0 && spent > 0) ? Math.round(spent / shopeeClicks) : null;
+
+      return {
+        campaignDisplay: c.campaignName,
+        adSetDisplay: '-',
+        adDisplay: '-',
+        tagDisplay: tag || '-',
+        spent,
+        linkClicks: c.linkClicks,
+        shopeeClicks,
+        dropPct,
+        cpcFb,
+        realCpc,
+        orders,
+        komisi: Math.round(komisi),
+        profit,
+        roas,
+        cpo,
+        delivery: c.delivery,
+      };
+    });
+
+    allTags.forEach(tag => {
+      if (!boundTags.has(tag) && salesByTag[tag] && salesByTag[tag].komisi > 0) {
+        const sale = salesByTag[tag];
+        const cData = clicksByTag[tag] || null;
+        const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : 0;
+        rows.push({
+          campaignDisplay: 'Organik / Tanpa Iklan FB',
+          adSetDisplay: '-',
+          adDisplay: '(Organik) ' + tag,
+          tagDisplay: tag,
+          spent: 0,
+          linkClicks: 0,
+          shopeeClicks,
+          dropPct: null,
+          cpcFb: null,
+          realCpc: null,
+          orders: sale.orders.size,
+          komisi: Math.round(sale.komisi),
+          profit: Math.round(sale.komisi),
+          roas: null,
+          cpo: null,
+          delivery: 'organic',
+        });
+      }
+    });
+
+    return rows.sort((a, b) => {
+      // Default Sort: Spend (Rp) terbesar (Standar Meta Ads Manager), lalu Komisi / Klik
+      if ((b.spent || 0) !== (a.spent || 0)) {
+        return (b.spent || 0) - (a.spent || 0);
+      }
+      if ((b.komisi || 0) !== (a.komisi || 0)) {
+        return (b.komisi || 0) - (a.komisi || 0);
+      }
+      return (b.linkClicks || 0) - (a.linkClicks || 0);
+    });
+  }
+}
+
+// --- FUNNEL SUMMARY & CHART -------------------------------------
+function renderFunnelSummary(campaigns, masterRows) {
+  const clSummary = document.getElementById('click-loss-summary');
+  const ctxLoss = document.getElementById('chart-click-loss');
+  if (!clSummary) return;
+
+  const withFb = (masterRows && masterRows.length > 0)
+    ? masterRows.filter(r => r.spent > 0 || r.linkClicks > 0)
+    : campaigns.filter(c => c.fb && c.fbLinkClicks > 0);
+
+  if (withFb.length > 0) {
+    const totalSpent     = withFb.reduce((s, r) => s + (r.spent || 0), 0);
+    const totalFbClicks  = withFb.reduce((s, r) => s + (r.linkClicks || r.fbLinkClicks || 0), 0);
+    const totalShopeeClk = withFb.reduce((s, r) => s + (r.shopeeClicks || r.stage2Value || 0), 0);
+    const totalOrders    = withFb.reduce((s, r) => s + (r.orders || 0), 0);
+
+    const dropStage1     = Math.max(0, totalFbClicks - totalShopeeClk);
+    const dropStage1Pct  = totalFbClicks > 0 ? (dropStage1 / totalFbClicks * 100) : 0;
+    const shopeeCvr      = totalShopeeClk > 0 ? (totalOrders / totalShopeeClk * 100) : 0;
+    const overallConv    = totalFbClicks > 0 ? (totalOrders / totalFbClicks * 100) : 0;
+
+    const cpcFb          = (totalFbClicks > 0 && totalSpent > 0) ? Math.round(totalSpent / totalFbClicks) : null;
+    const realCpc        = (totalShopeeClk > 0 && totalSpent > 0) ? Math.round(totalSpent / totalShopeeClk) : null;
+    const cpo            = (totalOrders > 0 && totalSpent > 0) ? Math.round(totalSpent / totalOrders) : null;
+
+    const cpcFbTxt       = cpcFb !== null ? 'Rp ' + fmt(cpcFb) : '-';
+    const realCpcTxt     = realCpc !== null ? 'Rp ' + fmt(realCpc) : '-';
+    const cpoTxt         = cpo !== null ? 'Rp ' + fmt(cpo) : '-';
+
+    const dropPillClass = dropStage1Pct > 50 ? 'pill-danger' : dropStage1Pct > 25 ? 'pill-warn' : 'pill-good';
+    const dropPillTitle = dropStage1Pct > 0 
+      ? `🔻 Drop-off ${dropStage1Pct.toFixed(1)}%` 
+      : `✅ Lolos 100%`;
+    const dropPillDesc = dropStage1Pct > 0 
+      ? `<strong>${fmt(dropStage1)}</strong> klik mental di jalan` 
+      : `Semua klik masuk Shopee`;
+    const dropPillSub = dropStage1Pct > 0 
+      ? `sebelum Shopee terbuka` 
+      : `tanpa kebocoran teknis`;
+
+    clSummary.innerHTML = `
+      <div class="funnel-step step-fb">
+        <div class="funnel-step-header">
+          <span class="funnel-step-badge badge-fb">Tahap 1</span>
+          <span class="funnel-cost-tag">CPC FB: ${cpcFbTxt}</span>
+        </div>
+        <div class="funnel-step-title">Klik Iklan (Meta FB)</div>
+        <div class="funnel-step-value" style="color:#2563eb">${fmt(totalFbClicks)}</div>
+        <div class="funnel-step-sub">Link clicks tercatat dari iklan berbayar</div>
+      </div>
+
+      <div class="funnel-connector">
+        <div class="connector-arrow">➔</div>
+        <div class="connector-pill ${dropPillClass}">
+          <div class="pill-top">${dropPillTitle}</div>
+          <div class="pill-mid">${dropPillDesc}</div>
+          <div class="pill-bot">${dropPillSub}</div>
+        </div>
+      </div>
+
+      <div class="funnel-step step-shopee">
+        <div class="funnel-step-header">
+          <span class="funnel-step-badge badge-shopee">Tahap 2</span>
+          <span class="funnel-cost-tag">Real CPC: ${realCpcTxt}</span>
+        </div>
+        <div class="funnel-step-title">Sampai di Shopee</div>
+        <div class="funnel-step-value" style="color:#8b5cf6">${fmt(totalShopeeClk)}</div>
+        <div class="funnel-step-sub">${state.clickReport.length > 0 ? 'Shopee Click Report' : 'Landing Page Views'} (${(100 - dropStage1Pct).toFixed(1)}% lolos)</div>
+      </div>
+
+      <div class="funnel-connector">
+        <div class="connector-arrow">➔</div>
+        <div class="connector-pill pill-cvr">
+          <div class="pill-top">🛒 Shopee CVR ${shopeeCvr.toFixed(2)}%</div>
+          <div class="pill-mid"><strong>${fmt(totalOrders)}</strong> pesanan dari <strong>${fmt(totalShopeeClk)}</strong> pengunjung</div>
+          <div class="pill-bot">rasio pesanan per pengunjung Shopee</div>
+        </div>
+      </div>
+
+      <div class="funnel-step step-order">
+        <div class="funnel-step-header">
+          <span class="funnel-step-badge badge-order">Tahap 3</span>
+          <span class="funnel-cost-tag">CPO: ${cpoTxt}</span>
+        </div>
+        <div class="funnel-step-title">Pesanan Masuk (Order)</div>
+        <div class="funnel-step-value" style="color:#10b981">${fmt(totalOrders)}</div>
+        <div class="funnel-step-sub">Total CVR: <strong>${overallConv.toFixed(2)}%</strong> dari total klik FB</div>
+      </div>
+    `;
+    clSummary.style.display = 'flex';
+
+    destroyChart('clickLoss');
+    if (ctxLoss) {
+      const canvas = ensureCanvas(ctxLoss);
+      const topItems = withFb.slice(0, 10);
+      const labels = topItems.map(r => (r.adDisplay && r.adDisplay !== '-') ? r.adDisplay : (r.campaignDisplay || r.name));
+      const fbClicks = topItems.map(r => r.linkClicks || r.fbLinkClicks || 0);
+      const spClicks = topItems.map(r => r.shopeeClicks || r.stage2Value || 0);
+      const orders = topItems.map(r => r.orders || 0);
+
+      state.charts['clickLoss'] = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: '1. Klik Iklan (FB)', data: fbClicks, backgroundColor: 'rgba(59,130,246,0.85)', borderRadius: 4 },
+            { label: '2. Klik Shopee', data: spClicks, backgroundColor: 'rgba(139,92,246,0.85)', borderRadius: 4 },
+            { label: '3. Order', data: orders, backgroundColor: 'rgba(16,185,129,0.85)', borderRadius: 4 }
+          ]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'top' },
+            datalabels: { display: true, anchor: 'end', align: 'end', color: dlColor(), font: { size: 9, weight: 600 }, formatter: v => v ? fmt(v) : '' }
+          },
+          scales: { y: { beginAtZero: true, title: { display: true, text: 'Jumlah' } } }
+        }
+      });
+    }
+  } else {
+    clSummary.style.display = 'none';
+    if (ctxLoss) ctxLoss.innerHTML = '';
+  }
+}
+
+// --- ROAS BAR CHART ---------------------------------------------
+function renderRoasBarChart(campaigns) {
+  destroyChart('roas');
+  const ctxRoas = document.getElementById('chart-roas');
+  if (!ctxRoas) return;
+  const canvas = ensureCanvas(ctxRoas);
+  const labels   = campaigns.map(c => c.name);
+  const roasVals = campaigns.map(c => c.roas !== null ? +c.roas.toFixed(2) : 0);
+  const colors   = roasVals.map(v => v >= 2 ? '#10b981' : v >= 1 ? '#f59e0b' : '#ef4444');
+  state.charts['roas'] = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'ROAS', data: roasVals, backgroundColor: colors, borderRadius: 6 },
+        { label: 'Break-even (1x)', data: labels.map(() => 1), type: 'line',
+          borderColor: '#94a3b8', borderDash: [6,4], borderWidth: 2, pointRadius: 0, fill: false,
+          datalabels: { display: false } }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: { callbacks: {
+          label: (ctx) => ctx.dataset.label === 'ROAS' ? `ROAS: ${ctx.raw}x` : 'Break-even'
+        }},
+        datalabels: { display: true, anchor: 'end', align: 'end', offset: -2, color: dlColor(),
+          font: { weight: 700, size: 10 }, formatter: (v) => v ? v.toFixed(2) + 'x' : '' }
+      },
+      scales: { y: { beginAtZero: true, suggestedMax: 1.2, title: { display: true, text: 'ROAS (x)' } } }
+    }
+  });
+}
+
+// --- CAMPAIGN TAB -----------------------------------------------
+function renderCampaignTab() {
+  const masterRows = computeMasterTableRows();
+  const campaigns = buildCampaignData();
+
+  // 1. Funnel 3-Tahap
+  renderFunnelSummary(campaigns, masterRows);
+
+  // 2. Master Table (15 Kolom)
+  const tbody = document.getElementById('tbody-campaign');
+  if (tbody) {
+    tbody.innerHTML = masterRows.map(r => {
+      const roasTxt = r.roas !== null ? r.roas.toFixed(2) + 'x' : (r.spent > 0 ? '0.00x' : '-');
+      const roasClass = r.roas !== null ? colorRoas(r.roas) : '';
+      const cpoTxt = r.cpo !== null ? 'Rp ' + fmt(Math.round(r.cpo)) : '-';
+      const cpcFbTxt = r.cpcFb !== null ? 'Rp ' + fmt(Math.round(r.cpcFb)) : '-';
+      const realCpcTxt = r.realCpc !== null ? 'Rp ' + fmt(Math.round(r.realCpc)) : '-';
+
+      let dropBadge = '-';
+      if (r.dropPct !== null) {
+        const cls = r.dropPct > 50 ? 'drop-danger' : r.dropPct > 25 ? 'drop-warn' : 'drop-good';
+        dropBadge = `<span class="drop-badge ${cls}">${r.dropPct.toFixed(1)}%</span>`;
+      }
+
+      const fbKlik = r.linkClicks > 0 ? fmt(r.linkClicks) : '-';
+      const spKlik = r.shopeeClicks > 0 ? fmt(r.shopeeClicks) : '-';
+
+      return `<tr>
+        <td><span class="campaign-link" onclick="filterProductByCampaign('${esc(r.campaignDisplay)}')" title="Klik untuk filter produk dari campaign ini"><strong>${esc(r.campaignDisplay)}</strong> <span class="drill-icon">🔍</span></span>${r.delivery === 'inactive' ? ' <span class="badge badge-gray" style="font-size:10px">nonaktif</span>' : ''}</td>
+        <td>${esc(r.adSetDisplay)}</td>
+        <td>${r.adDisplay !== '-' ? `<span class="badge badge-blue">${esc(r.adDisplay)}</span>` : '-'}</td>
+        <td>${r.spent > 0 ? 'Rp ' + fmt(r.spent) : '-'}</td>
+        <td>${fbKlik}</td>
+        <td>${spKlik}</td>
+        <td>${dropBadge}</td>
+        <td>${r.orders}</td>
+        <td>${cpcFbTxt}</td>
+        <td><strong>${realCpcTxt}</strong></td>
+        <td>${cpoTxt}</td>
+        <td>Rp ${fmt(r.komisi)}</td>
+        <td class="${r.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${r.profit >= 0 ? 'Rp ' : '-Rp '}${fmt(Math.abs(r.profit))}</td>
+        <td class="${roasClass}"><strong>${roasTxt}</strong></td>
+        <td>${getStatusBadge(r.roas, r.spent)}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="15" class="no-data">Tidak ada data campaign</td></tr>';
   }
 
-  const tbody = document.getElementById('tbody-campaign');
-  const prevSnap = getPrevSnapshot();
-  const prevCamp = prevSnap && Array.isArray(prevSnap.campaigns)
-    ? Object.fromEntries(prevSnap.campaigns.map(x => [x.name, x])) : {};
-  tbody.innerHTML = campaigns.map(c => {
-    const roasTxt   = c.roas !== null ? c.roas.toFixed(2) + 'x' : (c.spent > 0 ? '0.00x' : '-');
-    const roasClass = c.roas !== null ? colorRoas(c.roas) : '';
-    const cpoTxt    = c.cpo !== null ? 'Rp ' + fmt(c.cpo) : '-';
-    // Delta vs snapshot periode sebelumnya
-    const pv = prevCamp[c.name];
-    let dRoas = '<span style="color:var(--text-muted)">-</span>';
-    let dSpend = '<span style="color:var(--text-muted)">-</span>';
-    if (pv && pv.roas !== null && pv.roas !== undefined && c.roas !== null) {
-      const d = c.roas - pv.roas;
-      dRoas = `<span style="color:${d >= 0 ? '#10b981' : '#ef4444'};font-weight:600">${d >= 0 ? '▲ +' : '▼ '}${d.toFixed(2)}</span>`;
-    }
-    if (pv && pv.spent > 0 && c.spent > 0) {
-      const dp = (c.spent - pv.spent) / pv.spent * 100;
-      dSpend = `${dp >= 0 ? '+' : ''}${dp.toFixed(0)}%`;
-    }
-    return `<tr>
-      <td><strong>${esc(c.name)}</strong>${c.fb && c.fb.delivery === 'inactive' ? ' <span class="badge badge-gray" style="font-size:10px">nonaktif</span>' : ''}</td>
-      <td>${c.spent > 0 ? 'Rp ' + fmt(c.spent) : '-'}</td>
-      <td>${c.orders}</td>
-      <td>Rp ${fmt(c.komisi)}</td>
-      <td class="${c.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${c.profit >= 0 ? 'Rp ' : '-Rp '}${fmt(Math.abs(c.profit))}</td>
-      <td class="${roasClass}">${roasTxt}</td>
-      <td>${dRoas}</td>
-      <td>${dSpend}</td>
-      <td>${cpoTxt}</td>
-      <td>${c.fb ? fmt(c.fb.impressions) : '-'}</td>
-      <td>${c.fb ? fmt(c.fb.linkClicks) : '-'}</td>
-      <td>${c.fb ? c.fb.ctr.toFixed(2) + '%' : '-'}</td>
-      <td>${getStatusBadge(c.roas, c.spent)}</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="13" class="no-data">Tidak ada data campaign</td></tr>';
+  // 3. Table Footer Summary (100% Cocok dengan Kartu KPI)
+  const tfoot = document.getElementById('tfoot-campaign');
+  if (tfoot) {
+    const sumSpent = masterRows.reduce((s, r) => s + (r.spent || 0), 0);
+    const sumFbKlik = masterRows.reduce((s, r) => s + (r.linkClicks || 0), 0);
+    const sumShopeeKlik = masterRows.reduce((s, r) => s + (r.shopeeClicks || 0), 0);
+    const sumOrders = masterRows.reduce((s, r) => s + (r.orders || 0), 0);
+    const sumKomisi = masterRows.reduce((s, r) => s + (r.komisi || 0), 0);
+    const sumProfit = sumKomisi - sumSpent;
+    const avgRoas = sumSpent > 0 ? (sumKomisi / sumSpent) : null;
+    const avgCpo = (sumSpent > 0 && sumOrders > 0) ? Math.round(sumSpent / sumOrders) : null;
+    const avgCpcFb = (sumFbKlik > 0 && sumSpent > 0) ? Math.round(sumSpent / sumFbKlik) : null;
+    const avgRealCpc = (sumShopeeKlik > 0 && sumSpent > 0) ? Math.round(sumSpent / sumShopeeKlik) : null;
+    const avgDropPct = sumFbKlik > 0 ? Math.max(0, ((sumFbKlik - sumShopeeKlik) / sumFbKlik * 100)) : null;
 
-  renderAdsTable();
+    tfoot.innerHTML = `<tr>
+      <td><strong>TOTAL / RINGKASAN</strong></td>
+      <td>-</td>
+      <td><strong>${masterRows.length} item</strong></td>
+      <td><strong>Rp ${fmt(sumSpent)}</strong></td>
+      <td><strong>${sumFbKlik > 0 ? fmt(sumFbKlik) : '-'}</strong></td>
+      <td><strong>${sumShopeeKlik > 0 ? fmt(sumShopeeKlik) : '-'}</strong></td>
+      <td>${avgDropPct !== null ? `<span class="drop-badge ${avgDropPct > 50 ? 'drop-danger' : avgDropPct > 25 ? 'drop-warn' : 'drop-good'}">${avgDropPct.toFixed(1)}%</span>` : '-'}</td>
+      <td><strong>${fmt(sumOrders)}</strong></td>
+      <td>${avgCpcFb !== null ? 'Rp ' + fmt(avgCpcFb) : '-'}</td>
+      <td><strong>${avgRealCpc !== null ? 'Rp ' + fmt(avgRealCpc) : '-'}</strong></td>
+      <td>${avgCpo !== null ? 'Rp ' + fmt(avgCpo) : '-'}</td>
+      <td><strong>Rp ${fmt(sumKomisi)}</strong></td>
+      <td class="${sumProfit >= 0 ? 'profit-pos' : 'profit-neg'}"><strong>${sumProfit >= 0 ? 'Rp ' : '-Rp '}${fmt(Math.abs(sumProfit))}</strong></td>
+      <td class="${avgRoas !== null ? colorRoas(avgRoas) : ''}"><strong>${avgRoas !== null ? avgRoas.toFixed(2) + 'x' : '-'}</strong></td>
+      <td>-</td>
+    </tr>`;
+  }
+
+  // 4. ROAS Bar Chart
+  renderRoasBarChart(campaigns);
 }
 
 function getStatusBadge(roas, spent) {
   if (spent === 0) return '<span class="badge badge-gray">Organik</span>';
   if (roas === null) return '<span class="badge badge-gray">-</span>';
-  if (roas >= 3)    return '<span class="badge badge-green">🚀 Scale Up</span>';
-  if (roas >= 2)    return '<span class="badge badge-green">✅ Profitable</span>';
-  if (roas >= 1)    return '<span class="badge badge-yellow">[!] Break-even</span>';
-  return '<span class="badge badge-red">❌ Rugi</span>';
+  if (roas >= 2)    return '<span class="badge badge-green">ROAS ' + roas.toFixed(2) + 'x</span>';
+  if (roas >= 1)    return '<span class="badge badge-yellow">ROAS ' + roas.toFixed(2) + 'x</span>';
+  return '<span class="badge badge-red">ROAS ' + roas.toFixed(2) + 'x</span>';
 }
 
 // --- PRODUCT TAB ------------------------------------------------
 function computeProductRows() {
   const byProduct = {};
-  const fbNameSet = new Set(state.filteredFb.map(c => c.campaignName));
+  const fbNameSet = new Set([
+    ...state.filteredFb.map(c => c.campaignName),
+    ...(state.filteredFbAds || []).map(a => a.adName)
+  ].filter(Boolean));
   // Kelompokkan per ID Barang (konsisten lintas varian/judul), bukan per nama.
   // Nama yang ditampilkan = judul terpanjang (judul asli bisa sedikit beda antar baris).
   state.filteredShopee.forEach(r => {
@@ -1184,239 +1712,37 @@ function computeProductRows() {
 }
 
 function renderProductTab() {
-  const products = computeProductRows();
-
   destroyChart('topProduct');
-  const ctxTP = document.getElementById('chart-top-product');
-  if (ctxTP) {
-    const canvas = ensureCanvas(ctxTP);
-    const top15 = products.slice(0, 15);
-    state.charts['topProduct'] = new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels: top15.map(p => p.name.length > 40 ? p.name.slice(0, 40) + '...' : p.name),
-        datasets: [{ label: 'Orders', data: top15.map(p => p.orders), backgroundColor: '#6366f1', borderRadius: 4 }]
-      },
-      options: {
-        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: { x: { title: { display: true, text: 'Jumlah Order' } } }
-      }
-    });
+  let products = computeProductRows();
+  if (state.activeProductCampaignFilter) {
+    const q = state.activeProductCampaignFilter.toLowerCase();
+    products = products.filter(p => p.campaigns.some(c => c.toLowerCase().includes(q) || q.includes(c.toLowerCase())));
   }
-
-  document.getElementById('tbody-product').innerHTML = products.map(p => `<tr>
-    <td style="max-width:260px;white-space:normal;line-height:1.4">${esc(p.name)}</td>
-    <td>${esc(p.kategori)}</td>
-    <td><strong>${p.orders}</strong></td>
-    <td>Rp ${fmt(p.nilai)}</td>
-    <td>Rp ${fmt(p.komisi)}</td>
-    <td style="max-width:160px;white-space:normal">${p.campaigns.slice(0,3).map(c => `<span class="badge badge-blue">${esc(c)}</span>`).join(' ')}</td>
-  </tr>`).join('') || '<tr><td colspan="6" class="no-data">Tidak ada produk</td></tr>';
+  const tbody = document.getElementById('tbody-product');
+  if (tbody) {
+    tbody.innerHTML = products.map(p => `<tr>
+      <td style="max-width:260px;white-space:normal;line-height:1.4">${esc(p.name)}</td>
+      <td>${esc(p.kategori)}</td>
+      <td><strong>${p.orders}</strong></td>
+      <td>Rp ${fmt(p.nilai)}</td>
+      <td>Rp ${fmt(p.komisi)}</td>
+      <td style="max-width:160px;white-space:normal">${p.campaigns.slice(0,3).map(c => `<span class="badge badge-blue clickable-badge" onclick="filterProductByCampaign('${esc(c)}')" title="Filter campaign ini">${esc(c)}</span>`).join(' ')}</td>
+    </tr>`).join('') || `<tr><td colspan="6" class="no-data">Tidak ada produk${state.activeProductCampaignFilter ? ` untuk campaign "${esc(state.activeProductCampaignFilter)}"` : ''}</td></tr>`;
+  }
 }
 
-// --- COMPARISON TAB ---------------------------------------------
-function renderComparisonTab() {
-  const campaigns = buildCampaignData();
-
-  // -- Scatter Plot: CTR vs ROAS --
+// --- SCATTER PLOT (REMOVED / NO-OP) ------------------------------
+function renderScatterPlot() {
   destroyChart('scatter');
-  const ctxScatter = document.getElementById('chart-scatter');
-  if (ctxScatter) {
-    const canvas = ensureCanvas(ctxScatter);
-    const hasFb = campaigns.filter(c => c.fb && c.fb.ctr > 0 && c.roas !== null);
-    if (hasFb.length > 0) {
-      const maxSpend  = Math.max(...hasFb.map(c => c.spent), 1);
-      const xMax = Math.max(...hasFb.map(c => c.fb.ctr), 3) * 1.2;
-      const scatterData = hasFb.map(c => ({
-        x: parseFloat(c.fb.ctr.toFixed(2)),
-        y: parseFloat(c.roas.toFixed(4)),
-        r: Math.max(6, (c.spent / maxSpend) * 28),
-        label: c.name, spent: c.spent, roas: c.roas, ctr: c.fb.ctr,
-      }));
-      state.charts['scatter'] = new Chart(canvas, {
-        type: 'bubble',
-        data: { datasets: [
-          { label: 'Campaign', data: scatterData,
-            backgroundColor: scatterData.map(d => d.roas >= 2 ? 'rgba(16,185,129,0.6)' : d.roas >= 1 ? 'rgba(245,158,11,0.6)' : 'rgba(239,68,68,0.6)'),
-            borderColor:     scatterData.map(d => d.roas >= 2 ? '#10b981' : d.roas >= 1 ? '#f59e0b' : '#ef4444'),
-            borderWidth: 2 },
-          { type: 'line', label: 'Break-even (1x)',
-            data: [{ x: 0, y: 1 }, { x: xMax, y: 1 }],
-            borderColor: '#94a3b8', borderDash: [6, 4], borderWidth: 2, pointRadius: 0, fill: false,
-            datalabels: { display: false } }
-        ] },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          animation: { onComplete(anim) {
-            const chart = anim.chart, ctx2 = chart.ctx;
-            chart.data.datasets[0].data.forEach((d, i) => {
-              const pt = chart.getDatasetMeta(0).data[i]; if (!pt) return;
-              ctx2.save(); ctx2.fillStyle = '#1e293b'; ctx2.font = 'bold 10px Inter,sans-serif'; ctx2.textAlign = 'center';
-              ctx2.fillText(d.label.length > 12 ? d.label.slice(0,12)+'...' : d.label, pt.x, pt.y-(pt.options.radius||8)-4);
-              ctx2.restore();
-            });
-          }},
-          plugins: { legend: { display: false }, tooltip: { callbacks: {
-            title: (items) => items[0].raw.label,
-            label: (ctx) => { const d=ctx.raw; return [`CTR: ${d.ctr.toFixed(2)}%`,`ROAS: ${d.roas.toFixed(2)}x`,`Spend: Rp${fmtK(d.spent)}`]; }
-          }}},
-          scales: {
-            x: { min: 0, suggestedMax: 8, title: { display:true, text:'CTR Facebook Ads (%)' }, ticks: { callback: v => v+'%' } },
-            y: { title: { display:true, text:'ROAS (Komisi / Spend)' }, ticks: { callback: v => parseFloat(v).toFixed(2)+'x' } }
-          }
-        }
-      });
-    } else {
-      ctxScatter.innerHTML = '<div class="chart-empty">Tidak ada data FB Ads untuk scatter plot.</div>';
-    }
-  }
-
-  // -- FUNNEL CHART: 3 Tahap (Klik Iklan → Sampai Shopee → Order) --
-  destroyChart('clickLoss');
-  const ctxLoss = document.getElementById('chart-click-loss');
-  if (ctxLoss) {
-    const hasFbData = campaigns.filter(c => c.fb && c.fbLinkClicks > 0);
-    if (hasFbData.length > 0) {
-      const canvas = ensureCanvas(ctxLoss);
-      const labels       = hasFbData.map(c => c.name);
-      const fbClicks     = hasFbData.map(c => c.fbLinkClicks);
-      const shopeeClicks = hasFbData.map(c => c.stage2Value);
-      const orderCounts  = hasFbData.map(c => c.orders);
-
-      state.charts['clickLoss'] = new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels,
-          datasets: [
-            { label: '1. Klik Iklan (FB)', data: fbClicks,
-              backgroundColor: 'rgba(59,130,246,0.8)', borderColor: '#3b82f6', borderWidth: 1.5, borderRadius: 5 },
-            { label: '2. Klik Masuk Shopee', data: shopeeClicks,
-              backgroundColor: 'rgba(139,92,246,0.8)', borderColor: '#8b5cf6', borderWidth: 1.5, borderRadius: 5 },
-            { label: '3. Order', data: orderCounts,
-              backgroundColor: 'rgba(16,185,129,0.8)', borderColor: '#10b981', borderWidth: 1.5, borderRadius: 5 }
-          ]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'bottom' },
-            datalabels: { display: true, anchor: 'end', align: 'end', color: dlColor(),
-              font: { size: 9, weight: 600 }, formatter: (v) => v ? fmt(v) : '' },
-            tooltip: { callbacks: { label: (ctx) => {
-              const i = ctx.dataIndex;
-              const c = hasFbData[i];
-              if (ctx.datasetIndex === 0) return `Klik Iklan: ${fmt(ctx.raw)}`;
-              if (ctx.datasetIndex === 1) {
-                const drop = (c.dropClickToShopeePct != null && isFinite(c.dropClickToShopeePct)) ? c.dropClickToShopeePct.toFixed(1) : '0';
-                return `Klik Masuk Shopee: ${fmt(ctx.raw)} (hilang ${drop}% dari klik)${c.stage2Source === 'click_report' ? ' [Click Report]' : ' [LPV]'}`;
-              }
-              const conv = (c.overallConvPct != null && isFinite(c.overallConvPct)) ? c.overallConvPct.toFixed(2) : '0';
-              return `Order: ${ctx.raw} (conv. ${conv}% dari klik)`;
-            }}}
-          },
-          scales: {
-            y: { title: { display: true, text: 'Jumlah' }, ticks: { callback: v => fmtK(v) } }
-          }
-        }
-      });
-    } else {
-      ctxLoss.innerHTML = '<div class="chart-empty">Unggah file FB Ads untuk melihat funnel klik.</div>';
-    }
-  }
-
-  // -- Funnel Summary Cards (3 Tahap) --
-  const clSummary = document.getElementById('click-loss-summary');
-  if (clSummary) {
-    const withFb = campaigns.filter(c => c.fb && c.fbLinkClicks > 0);
-    if (withFb.length > 0) {
-      const totalFbClicks   = withFb.reduce((s,c) => s + c.fbLinkClicks, 0);
-      const totalShopeeClk  = withFb.reduce((s,c) => s + c.stage2Value, 0);
-      const totalOrders     = withFb.reduce((s,c) => s + c.orders, 0);
-      const dropStage1Pct   = totalFbClicks > 0 ? ((totalFbClicks - totalShopeeClk) / totalFbClicks * 100) : 0;
-      const dropStage2Pct   = totalShopeeClk > 0 ? ((totalShopeeClk - totalOrders) / totalShopeeClk * 100) : 0;
-      const overallConv     = totalFbClicks > 0 ? (totalOrders / totalFbClicks * 100) : 0;
-      const colorDrop1      = dropStage1Pct > 50 ? '#ef4444' : dropStage1Pct > 20 ? '#f97316' : '#10b981';
-      const colorDrop2      = dropStage2Pct > 98 ? '#ef4444' : dropStage2Pct > 95 ? '#f97316' : '#10b981';
-
-      clSummary.innerHTML = `
-        <div class="cl-card">
-          <div class="cl-label">1. Klik Iklan (FB)</div>
-          <div class="cl-value" style="color:#3b82f6">${fmt(totalFbClicks)}</div>
-          <div class="cl-sub">link clicks dari FB Ads</div>
-        </div>
-        <div class="cl-card">
-          <div class="cl-label">↓ Hilang ${dropStage1Pct.toFixed(1)}%</div>
-          <div class="cl-value" style="color:${colorDrop1}">${fmt(totalFbClicks - totalShopeeClk)}</div>
-          <div class="cl-sub">tidak sampai ke Shopee</div>
-        </div>
-        <div class="cl-card">
-          <div class="cl-label">2. Klik Masuk Shopee</div>
-          <div class="cl-value" style="color:#8b5cf6">${fmt(totalShopeeClk)}</div>
-          <div class="cl-sub">${state.clickReport.length > 0 ? 'dari Click Report (perujuk Facebook)' : 'dari Landing Page Views'}</div>
-        </div>
-        <div class="cl-card">
-          <div class="cl-label">↓ Hilang ${dropStage2Pct.toFixed(1)}%</div>
-          <div class="cl-value" style="color:${colorDrop2}">${fmt(totalShopeeClk - totalOrders)}</div>
-          <div class="cl-sub">lihat tapi tidak order</div>
-        </div>
-        <div class="cl-card">
-          <div class="cl-label">3. Order</div>
-          <div class="cl-value" style="color:#10b981">${fmt(totalOrders)}</div>
-          <div class="cl-sub">conv. rate: ${overallConv.toFixed(2)}%</div>
-        </div>
-      `;
-      clSummary.style.display = 'grid';
-    } else {
-      clSummary.style.display = 'none';
-    }
-  }
-
-  // -- Comparison Table --
-  const tbody = document.getElementById('tbody-comparison');
-  tbody.innerHTML = campaigns.map(c => {
-    const convRate    = c.fb && c.fb.linkClicks>0 ? (c.orders/c.fb.linkClicks*100).toFixed(2)+'%' : '-';
-    const roasTxt     = c.roas !== null ? c.roas.toFixed(2)+'x' : '-';
-    const roasClass   = c.roas !== null ? colorRoas(c.roas) : '';
-    const cpoTxt      = c.cpo !== null ? 'Rp '+fmt(c.cpo) : '-';
-    const clickGap    = c.fb && c.fb.linkClicks>0 && c.orders>0 ? Math.round(c.fb.linkClicks/c.orders) : null;
-    const clickGapCls = clickGap!==null ? (clickGap>100?'roas-negative':clickGap>50?'roas-neutral':'roas-positive') : '';
-    // Funnel columns
-    const fbKlik      = c.fb ? fmt(c.fbLinkClicks) : '-';
-    const spClk       = c.stage2Value > 0 ? fmt(c.stage2Value) : '-';
-    const dropPct     = (c.dropClickToShopeePct != null && isFinite(c.dropClickToShopeePct)) ? parseFloat(c.dropClickToShopeePct.toFixed(1)) : null;
-    const dropClass   = dropPct!==null ? (dropPct>50?'roas-negative':dropPct>20?'roas-neutral':'roas-positive') : '';
-    return `<tr>
-      <td><strong>${esc(c.name)}</strong></td>
-      <td>${c.fb ? fmt(c.fb.impressions) : '-'}</td>
-      <td>${fbKlik}</td>
-      <td>${spClk}</td>
-      <td class="${dropClass}">${dropPct!==null ? dropPct+'%' : '-'}</td>
-      <td class="${c.fb && c.fb.ctr>3?'roas-positive':c.fb && c.fb.ctr<1?'roas-negative':''}">${c.fb ? c.fb.ctr.toFixed(2)+'%' : '-'}</td>
-      <td>${c.spent>0 ? 'Rp '+fmt(c.spent) : '-'}</td>
-      <td>${c.orders}</td>
-      <td>${convRate}</td>
-      <td class="${clickGapCls}">${clickGap!==null ? clickGap+' klik/order' : '-'}</td>
-      <td>${cpoTxt}</td>
-      <td>Rp ${fmt(c.komisi)}</td>
-      <td>${c.fb && c.fb.linkClicks > 0 ? 'Rp ' + fmt(c.komisi / c.fb.linkClicks * 1000) : '-'}</td>
-      <td class="${roasClass}">${roasTxt}</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="13" class="no-data">Tidak ada data</td></tr>';
-}
-
-function filterComparisonTable() {
-  const q = document.getElementById('search-comparison').value.toLowerCase();
-  document.querySelectorAll('#tbody-comparison tr').forEach(tr => {
-    tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
-  });
 }
 
 // --- TREND TAB --------------------------------------------------
 function renderTrendTab() {
   const byDate  = {};
-  const fbNameSet = new Set(state.filteredFb.map(c => c.campaignName));
+  const fbNameSet = new Set([
+    ...state.filteredFb.map(c => c.campaignName),
+    ...(state.filteredFbAds || []).map(a => a.adName)
+  ].filter(Boolean));
   const campaignColors = {};
   const palette = ['#6366f1','#10b981','#f97316','#3b82f6','#8b5cf6','#ef4444','#f59e0b','#06b6d4'];
   let colorIdx = 0;
@@ -1565,8 +1891,11 @@ function renderClickInsights() {
   // Klik vs Order per jam (00-23) — bandingkan jam klik iklan vs jam order masuk
   const byHour = Array(24).fill(0);
   state.filteredClicks.forEach(c => {
-    const h = parseInt((c.waktuKlik || '').slice(11, 13), 10);
-    if (!isNaN(h) && h >= 0 && h <= 23) byHour[h]++;
+    const m = (c.waktuKlik || '').match(/(?:^|\s)(\d{1,2}):\d{2}/);
+    if (m) {
+      const h = parseInt(m[1], 10);
+      if (h >= 0 && h <= 23) byHour[h]++;
+    }
   });
   const maxHour = Math.max(...byHour);
   const maxOrders = Math.max(...ordersByHour);
@@ -1616,7 +1945,7 @@ function computeAdRows() {
   const salesByTag = {};
   state.filteredShopee.forEach(r => {
     const tag = (r.tag1 || r.tag3 || '').trim();
-    if (!tag) return;
+    if (!tag || tag === '-') return;
     if (!salesByTag[tag]) salesByTag[tag] = { orders: new Set(), komisi: 0 };
     if (isCountableOrder(r)) salesByTag[tag].orders.add(r.orderId);
     salesByTag[tag].komisi += r.komisiBersih;
@@ -1659,13 +1988,13 @@ function computeAdRows() {
     byAd[a.adName].impressions += a.impressions || 0;
   });
 
-  const ppn = document.getElementById('ppn-toggle')?.checked ? 1.11 : 1;
+  const feeRatio = getTaxFeeRatio();
   const rows = Object.values(byAd).map(a => {
     const tag = tagForAd(a.adName);
     const sale = tag ? salesByTag[tag] : null;
     const orders = sale ? sale.orders.size : null;
     const komisi = sale ? sale.komisi : null;
-    const spent = a.spent * ppn;
+    const spent = Math.round(a.spent * feeRatio);
     const roas = spent > 0 && komisi !== null ? komisi / spent : null;
     const cpo = spent > 0 && orders ? spent / orders : null;
     return { ...a, spent, orders, komisi, roas, cpo, tag, matched: !!tag };
@@ -1828,84 +2157,9 @@ function renderRoasJourney() {
   });
 }
 
-// --- FB BREAKDOWN: AGE / GENDER / PLATFORM / REGION -------------
+// --- FB BREAKDOWN (REMOVED / NO-OP) ------------------------------
 function renderFbBreakdown() {
-  const wrapAge = document.getElementById('chart-fb-age');
-  const wrapGender = document.getElementById('chart-fb-gender');
-  const wrapPlatform = document.getElementById('chart-fb-platform');
-  const wrapRegion = document.getElementById('chart-fb-region');
-  const secEl = document.getElementById('fb-breakdown-section');
-  const emptyEl = document.getElementById('fb-breakdown-empty');
-  const emptyText = document.getElementById('fb-breakdown-empty-text');
-  if (!wrapAge || !wrapGender || !wrapPlatform || !wrapRegion) return;
-
-  const bd = state.filteredFbBreakdown || [];
-  if (bd.length === 0) {
-    ['fbAge', 'fbGender', 'fbPlatform', 'fbRegion'].forEach(k => destroyChart(k));
-    if (secEl) secEl.style.display = 'none';
-    if (emptyEl) emptyEl.style.display = 'flex';
-    if (emptyText) emptyText.innerHTML = 'Belum ada data breakdown. Di <strong>Ads Manager → Reports → Breakdown</strong>: pilih <strong>Usia & Gender</strong> (satu file), atau <strong>Wilayah / Platform</strong> melalui Breakdown → By Delivery (file terpisah). Export CSV, lalu unggah sebagai file FB Ads tambahan — beberapa file breakdown boleh diunggah sekaligus, biaya tidak akan terhitung ganda.';
-    return;
-  }
-  if (secEl) secEl.style.display = 'block';
-  if (emptyEl) emptyEl.style.display = 'none';
-
-  const agg = (keyFn, order) => {
-    const m = {};
-    const ppn = document.getElementById('ppn-toggle')?.checked ? 1.11 : 1; // konsisten dgn spend di metrik lain
-    bd.forEach(r => {
-      const k = keyFn(r);
-      if (!k) return;
-      if (!m[k]) m[k] = { clicks: 0, spent: 0 };
-      m[k].clicks += r.linkClicks;
-      m[k].spent += r.spent * ppn;
-    });
-    let entries = Object.entries(m);
-    if (order) entries.sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
-    else entries.sort((a, b) => b[1].clicks - a[1].clicks);
-    return entries;
-  };
-
-  // AGE — urut sesuai rentang usia
-  const ageData = agg(r => r.age, FB_AGE_ORDER.concat('unknown'));
-  destroyChart('fbAge');
-  const ageCanvas = ensureCanvas(wrapAge);
-  state.charts['fbAge'] = new Chart(ageCanvas, {
-    type: 'bar',
-    data: { labels: ageData.map(([k]) => k), datasets: [{ label: 'Klik', data: ageData.map(([, v]) => v.clicks), backgroundColor: '#6366f1', borderRadius: 4 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = ageData[ctx.dataIndex][1]; return [`${fmt(d.clicks)} klik`, `Spend Rp${fmtK(d.spent)}`]; } } } }, scales: { y: { beginAtZero: true } } }
-  });
-
-  // GENDER — doughnut
-  const genderData = agg(r => r.gender);
-  const genderColors = { 'Laki-laki': '#3b82f6', 'Perempuan': '#ec4899', 'Tidak diketahui': '#94a3b8' };
-  destroyChart('fbGender');
-  const genderCanvas = ensureCanvas(wrapGender);
-  state.charts['fbGender'] = new Chart(genderCanvas, {
-    type: 'doughnut',
-    data: { labels: genderData.map(([k]) => k), datasets: [{ data: genderData.map(([, v]) => v.clicks), backgroundColor: genderData.map(([k]) => genderColors[k] || '#64748b'), hoverOffset: 8 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: (ctx) => { const d = genderData[ctx.dataIndex][1]; return `${ctx.label}: ${fmt(d.clicks)} klik (Spend Rp${fmtK(d.spent)})`; } } } } }
-  });
-
-  // PLATFORM
-  const platData = agg(r => r.platform);
-  destroyChart('fbPlatform');
-  const platCanvas = ensureCanvas(wrapPlatform);
-  state.charts['fbPlatform'] = new Chart(platCanvas, {
-    type: 'bar',
-    data: { labels: platData.map(([k]) => k), datasets: [{ label: 'Klik', data: platData.map(([, v]) => v.clicks), backgroundColor: '#10b981', borderRadius: 4 }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = platData[ctx.dataIndex][1]; return [`${fmt(d.clicks)} klik`, `Spend Rp${fmtK(d.spent)}`]; } } } }, scales: { x: { beginAtZero: true } } }
-  });
-
-  // REGION — top 8
-  const regData = agg(r => r.region).slice(0, 8);
-  destroyChart('fbRegion');
-  const regCanvas = ensureCanvas(wrapRegion);
-  state.charts['fbRegion'] = new Chart(regCanvas, {
-    type: 'bar',
-    data: { labels: regData.map(([k]) => k.length > 30 ? k.slice(0, 30) + '…' : k), datasets: [{ label: 'Klik', data: regData.map(([, v]) => v.clicks), backgroundColor: '#f97316', borderRadius: 4 }] },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => { const d = regData[ctx.dataIndex][1]; return [`${fmt(d.clicks)} klik`, `Spend Rp${fmtK(d.spent)}`]; } } } }, scales: { x: { beginAtZero: true } } }
-  });
+  ['fbAge', 'fbGender', 'fbPlatform', 'fbRegion'].forEach(k => destroyChart(k));
 }
 
 // --- TABLES: SORT & SEARCH --------------------------------------
@@ -1916,21 +2170,32 @@ function sortTable(tableId, colIdx) {
   const key   = tableId + '-' + colIdx;
   state.sortDir[key] = !state.sortDir[key];
 
-  const parse = (s) => {
-    const raw = String(s).replace(/[^0-9.\-]/g, '');
-    // Format id-ID: titik = pemisah ribuan ('501.234', '1.234.567'), bukan desimal.
-    // Pola ini aman karena ROAS/CTR tampil 2 desimal ('0.75', '2.14') sehingga tidak kena.
-    if (/^-?\d{1,3}(\.\d{3})+$/.test(raw)) return parseFloat(raw.replace(/\./g, ''));
-    const n = parseNum(raw);
-    return isNaN(n) ? String(s).toLowerCase() : n;
+  const parseCell = (s) => {
+    const str = String(s || '').trim();
+    if (!str || str === '-') return { isNum: true, val: null, str: '' };
+    // Pola angka (misal: "Rp 18.415", "-Rp 73.820", "2.14%", "1.85x", "50", "▲ +0.50", "123")
+    const m = str.match(/^([+-])?(?:Rp\s*)?(-?[\d.,]+)(?:\s*(?:%|x|rb|Jt|jt|k|K|klik\/order))?$/i);
+    if (m) {
+      const sign = (m[1] === '-' || m[2].startsWith('-')) ? -1 : 1;
+      let numStr = m[2].replace(/^-/, '');
+      if (/^\d{1,3}(\.\d{3})+$/.test(numStr)) numStr = numStr.replace(/\./g, '');
+      const val = parseFloat(numStr);
+      if (!isNaN(val)) return { isNum: true, val: sign * val, str: str.toLowerCase() };
+    }
+    return { isNum: false, val: null, str: str.toLowerCase() };
   };
 
   rows.sort((a, b) => {
-    const ta = parse(a.cells[colIdx]?.innerText || '');
-    const tb = parse(b.cells[colIdx]?.innerText || '');
-    if (ta < tb) return state.sortDir[key] ? -1 : 1;
-    if (ta > tb) return state.sortDir[key] ?  1 : -1;
-    return 0;
+    const ta = parseCell(a.cells[colIdx]?.innerText || '');
+    const tb = parseCell(b.cells[colIdx]?.innerText || '');
+    if (ta.isNum && tb.isNum) {
+      if (ta.val === null && tb.val === null) return 0;
+      if (ta.val === null) return 1;
+      if (tb.val === null) return -1;
+      return state.sortDir[key] ? ta.val - tb.val : tb.val - ta.val;
+    }
+    const cmp = ta.str.localeCompare(tb.str, 'id', { numeric: true });
+    return state.sortDir[key] ? cmp : -cmp;
   });
   rows.forEach(r => tbody.appendChild(r));
 }
@@ -1976,18 +2241,24 @@ function exportExcel() {
       { Metrik: 'Total Order Valid', Nilai: new Set(state.filteredShopee.filter(isCountableOrder).map(r => r.orderId)).size },
     ]), 'Ringkasan');
 
-    // Per Campaign
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(camps.map(c => ({
-      Campaign: c.name, Spend: Math.round(c.spent), Orders: c.orders,
-      Komisi: Math.round(c.komisi), Profit: Math.round(c.profit),
-      ROAS: c.roas !== null ? +c.roas.toFixed(2) : '',
-      CPO: c.cpo !== null ? Math.round(c.cpo) : '',
-      Impresi: c.fb ? c.fb.impressions : '', Klik_FB: c.fb ? c.fb.linkClicks : '',
-      CTR_pct: c.fb ? +c.fb.ctr.toFixed(2) : '',
-      Klik_Masuk_Shopee: c.stage2Value > 0 ? c.stage2Value : '',
-      Klik_per_Order: (c.fb && c.fb.linkClicks > 0 && c.orders > 0) ? Math.round(c.fb.linkClicks / c.orders) : '',
-      Komisi_per_1k_Klik: (c.fb && c.fb.linkClicks > 0) ? Math.round(c.komisi / c.fb.linkClicks * 1000) : '',
-    }))), 'Per Campaign');
+    // Evaluasi Campaign & Ad (Master Table)
+    const masterRows = computeMasterTableRows();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(masterRows.map(r => ({
+      Campaign: r.campaignDisplay,
+      'Ad Set': r.adSetDisplay,
+      'Ad / Tag': r.adDisplay,
+      'Spend (Rp)': r.spent,
+      'Klik FB': r.linkClicks,
+      'Klik Shopee': r.shopeeClicks > 0 ? r.shopeeClicks : '',
+      'Bocor (%)': r.dropPct !== null ? +r.dropPct.toFixed(1) : '',
+      Orders: r.orders,
+      'CPC FB (Rp)': r.cpcFb !== null ? Math.round(r.cpcFb) : '',
+      'Real CPC (Rp)': r.realCpc !== null ? Math.round(r.realCpc) : '',
+      'CPO (Rp)': r.cpo !== null ? Math.round(r.cpo) : '',
+      'Komisi (Rp)': r.komisi,
+      'Profit (Rp)': r.profit,
+      ROAS: r.roas !== null ? +r.roas.toFixed(2) : '',
+    }))), 'Evaluasi Campaign & Ad');
 
     // Per Produk
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(computeProductRows().map(p => ({
@@ -2000,18 +2271,6 @@ function exportExcel() {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(st.map(s => ({
       Status: s.status, Orders: s.count, Komisi: Math.round(s.komisi),
     }))), 'Status Pesanan');
-
-    // Per Ad (kalau ada export level Ad)
-    const adRows = computeAdRows();
-    if (adRows.length > 0) {
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(adRows.map(a => ({
-        Ad: a.adName, 'Ad Set': a.adSetName, Campaign: a.campaignName, Tag: a.tag || '',
-        Spend: Math.round(a.spent), 'Klik FB': a.linkClicks,
-        Orders: a.orders !== null ? a.orders : '',
-        Komisi: a.komisi !== null ? Math.round(a.komisi) : '',
-        ROAS: a.roas !== null ? +a.roas.toFixed(2) : '',
-      }))), 'Per Ad');
-    }
 
     // Riwayat
     if (state.history.length > 0) {
@@ -2090,20 +2349,189 @@ function setupExportButtons() {
 }
 setupExportButtons();
 
-// --- TABS -------------------------------------------------------
-function switchTab(tabName, btn) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + tabName).classList.add('active');
-  btn.classList.add('active');
+// --- SECTION NAVIGATION & SMOOTH JUMP ---------------------------
+let isProgrammaticScroll = false;
+let isScrollSpyBound = false;
+
+function updateActiveNavPill() {
+  if (isProgrammaticScroll) return;
+  const sections = document.querySelectorAll('.dashboard-section');
+  const navPills = document.querySelectorAll('.nav-pill');
+  if (!sections.length || !navPills.length) return;
+
+  const scrollY = window.scrollY || window.pageYOffset || 0;
+  // Offset header (60px) + sticky nav pill (48px) + offset buffer (40px) = ~150px
+  const probeY = scrollY + 150;
+
+  let activeId = sections[0].id;
+  sections.forEach(sec => {
+    if (probeY >= sec.offsetTop) {
+      activeId = sec.id;
+    }
+  });
+
+  navPills.forEach(p => {
+    if (p.getAttribute('href') === '#' + activeId) {
+      p.classList.add('active');
+    } else {
+      p.classList.remove('active');
+    }
+  });
+}
+
+function scrollToSection(secId, event) {
+  if (event) event.preventDefault();
+  const el = document.getElementById(secId);
+  if (el) {
+    isProgrammaticScroll = true;
+    document.querySelectorAll('.nav-pill').forEach(p => {
+      if (p.getAttribute('href') === '#' + secId) p.classList.add('active');
+      else p.classList.remove('active');
+    });
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      isProgrammaticScroll = false;
+      updateActiveNavPill();
+    }, 700);
+  }
+}
+
+function switchTab(tabName) {
+  const map = { campaign: 'sec-campaign', product: 'sec-product', trend: 'sec-trend' };
+  if (map[tabName]) scrollToSection(map[tabName]);
+}
+
+function setupSectionNavObserver() {
+  if (!isScrollSpyBound) {
+    window.addEventListener('scroll', () => {
+      window.requestAnimationFrame(updateActiveNavPill);
+    }, { passive: true });
+    window.addEventListener('resize', () => {
+      window.requestAnimationFrame(updateActiveNavPill);
+    }, { passive: true });
+    isScrollSpyBound = true;
+  }
+  updateActiveNavPill();
+}
+
+// --- DRILL-DOWN CAMPAIGN & PRODUK (FITUR D) ---------------------
+function filterProductByCampaign(campaignName) {
+  state.activeProductCampaignFilter = campaignName;
+  renderProductTab();
+  const chip = document.getElementById('product-filter-chip');
+  const chipName = document.getElementById('product-filter-name');
+  if (chip && chipName) {
+    chipName.textContent = campaignName;
+    chip.style.display = 'inline-flex';
+  }
+  scrollToSection('sec-product');
+  showToast(`🔍 Menampilkan produk dari campaign "${campaignName}"`);
+}
+
+function clearProductCampaignFilter() {
+  state.activeProductCampaignFilter = null;
+  renderProductTab();
+  const chip = document.getElementById('product-filter-chip');
+  if (chip) chip.style.display = 'none';
+  showToast('Semua produk ditampilkan kembali');
+}
+
+// --- SALIN RINGKASAN WA / CATATAN (FITUR C) --------------------
+function showToast(msg) {
+  let t = document.getElementById('aff-toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'aff-toast';
+    t.className = 'aff-toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function copyWaSummary() {
+  const feePct = getTaxFeePct();
+  const masterRows = computeMasterTableRows();
+  const sumSpent = masterRows.reduce((s, r) => s + (r.spent || 0), 0);
+  const sumFbKlik = masterRows.reduce((s, r) => s + (r.linkClicks || 0), 0);
+  const sumShopeeKlik = masterRows.reduce((s, r) => s + (r.shopeeClicks || 0), 0);
+  const sumOrders = masterRows.reduce((s, r) => s + (r.orders || 0), 0);
+  const sumKomisi = masterRows.reduce((s, r) => s + (r.komisi || 0), 0);
+  const sumProfit = sumKomisi - sumSpent;
+  const roas = sumSpent > 0 ? (sumKomisi / sumSpent) : null;
+  const cpo = (sumSpent > 0 && sumOrders > 0) ? Math.round(sumSpent / sumOrders) : null;
+  const dropPct = sumFbKlik > 0 ? Math.max(0, ((sumFbKlik - sumShopeeKlik) / sumFbKlik * 100)) : 0;
+
+  const rawStart = document.getElementById('filter-start')?.value || '';
+  const rawEnd = document.getElementById('filter-end')?.value || '';
+  let periode = (rawStart && rawEnd) ? `${rawStart} s/d ${rawEnd}` : '';
+  if (!periode) {
+    const allDates = [...state.filteredShopee.map(r => r.date), ...state.filteredFb.map(c => c.date)].filter(Boolean).sort();
+    periode = allDates.length > 0 ? `${allDates[0]} s/d ${allDates[allDates.length - 1]}` : 'Semua Periode';
+  }
+
+  const best = masterRows.filter(r => r.spent > 0 && r.roas !== null).sort((a, b) => b.roas - a.roas)[0];
+  const worst = masterRows.filter(r => r.spent > 0 && r.profit < 0).sort((a, b) => a.profit - b.profit)[0];
+
+  const lines = [
+    `📊 *Laporan Affalitycs*`,
+    `📅 Periode: ${periode}`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+    `💰 *Total Komisi*: Rp ${fmt(sumKomisi)}`,
+    `💸 *Total Spend FB*: Rp ${fmt(sumSpent)}${feePct > 0 ? ` (+${feePct}% Fee/Pajak)` : ''}`,
+    `📈 *Overall ROAS*: ${roas !== null ? roas.toFixed(2) + 'x' : '-'}`,
+    `⚖️ *Profit / Loss*: ${sumProfit >= 0 ? '+Rp ' : '-Rp '}${fmt(Math.abs(sumProfit))} (${sumProfit >= 0 ? 'Untung' : 'Rugi'})`,
+    `📦 *Total Order*: ${fmt(sumOrders)} pesanan${cpo !== null ? ` (CPO Rp ${fmt(cpo)})` : ''}`,
+    `🖱️ *Klik FB*: ${fmt(sumFbKlik)} ➔ *Shopee*: ${fmt(sumShopeeKlik)} (Bocor ${dropPct.toFixed(1)}%)`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
+  ];
+  if (best) {
+    lines.push(`🏆 *Best Campaign*: ${best.campaignDisplay} (ROAS ${best.roas.toFixed(2)}x, Profit ${best.profit >= 0 ? '+Rp ' : '-Rp '}${fmt(Math.abs(best.profit))})`);
+  }
+  if (worst && worst.campaignDisplay !== best?.campaignDisplay) {
+    lines.push(`⚠️ *Defisit Terbesar*: ${worst.campaignDisplay} (Rugi -Rp ${fmt(Math.abs(worst.profit))})`);
+  }
+  lines.push(`\n_Dibuat otomatis oleh Affalitycs_`);
+
+  const text = lines.join('\n');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('📋 Ringkasan berhasil disalin ke clipboard!');
+    }).catch(() => fallbackCopy(text));
+  } else {
+    fallbackCopy(text);
+  }
+
+  function fallbackCopy(str) {
+    const ta = document.createElement('textarea');
+    ta.value = str;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('📋 Ringkasan berhasil disalin ke clipboard!');
+  }
 }
 
 // --- FILTERS ----------------------------------------------------
 function resetFilters() {
-  const dates = state.shopeeRows.map(r => r.date).filter(Boolean).sort();
+  const dates = [
+    ...state.shopeeRows.map(r => r.date),
+    ...state.fbCampaigns.map(c => c.date),
+  ].filter(Boolean).sort();
   if (dates.length > 0) {
     setRange(dates[0], dates[dates.length - 1]);
+  } else {
+    setRange('', '');
   }
+  const feeInput = document.getElementById('tax-fee-input');
+  if (feeInput) feeInput.value = 0;
+  const validToggle = document.getElementById('valid-orders-toggle');
+  if (validToggle) validToggle.checked = true;
   applyFilters();
 }
 
@@ -2206,6 +2634,7 @@ function loadDemoData() {
   state.mapping = {};
   state.clickReport = [];
   state.fbBreakdown = [];
+  state.fbAds = [];
   state.fbCampaigns.forEach(c => { state.mapping[c.campaignName] = c.campaignName; });
 
   setTimeout(() => { buildDashboard(); }, 300);
