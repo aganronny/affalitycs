@@ -736,8 +736,9 @@
         <div class="filter-actions">
           <button class="btn-ghost btn-copy-wa" onclick="copyWaSummary()" title="Salin ringkasan laporan ke format WhatsApp / Catatan">📋 Salin Ringkasan (WA)</button>
           <button class="btn-ghost" onclick="exportExcel()" title="Unduh laporan lengkap dalam format Excel .xlsx">📗 Excel</button>
-          
-          <!-- Dropdown Tindakan Tambahan -->
+          <button class="btn-ghost danger" onclick="resetAll()" title="Kembali ke halaman upload dan ganti file">↩️ Upload Ulang</button>
+
+          <!-- Dropdown Tindakan Tambahan (Lainnya) di pinggir -->
           <div class="dropdown-wrap" id="dropdown-more-wrap">
             <button type="button" class="btn-ghost dropdown-trigger" onclick="toggleMoreMenu(event)" title="Menu tindakan tambahan">⋯ Lainnya ▾</button>
             <div class="dropdown-menu" id="dropdown-more-menu" style="display:none;">
@@ -757,7 +758,6 @@
             </div>
           </div>
 
-          <button class="btn-ghost danger" onclick="resetAll()" title="Kembali ke halaman upload dan ganti file">↩️ Upload Ulang</button>
           <input type="file" id="restore-file" accept=".json,application/json" style="display:none" onchange="if (this.files[0]) restoreData(this.files[0]); this.value='';" />
         </div>
       </div>
