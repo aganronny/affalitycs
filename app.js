@@ -1588,7 +1588,7 @@ function renderCampaignTab() {
         <td>Rp ${fmt(r.komisi)}</td>
         <td class="${r.profit >= 0 ? 'profit-pos' : 'profit-neg'}">${r.profit >= 0 ? 'Rp ' : '-Rp '}${fmt(Math.abs(r.profit))}</td>
         <td class="${roasClass}"><strong>${roasTxt}</strong></td>
-        <td>${getStatusBadge(r.roas, r.spent)}</td>
+        <td>${getStatusBadge(r.roas, r.spent, r.delivery)}</td>
       </tr>`;
     }).join('') || '<tr><td colspan="15" class="no-data">Tidak ada data campaign</td></tr>';
   }
@@ -1631,8 +1631,9 @@ function renderCampaignTab() {
   renderRoasBarChart(campaigns);
 }
 
-function getStatusBadge(roas, spent) {
-  if (spent === 0) return '<span class="badge badge-gray">Organik</span>';
+function getStatusBadge(roas, spent, delivery) {
+  if (delivery === 'organic') return '<span class="badge badge-gray">Organik</span>';
+  if (spent === 0) return '<span class="badge badge-gray">Rp 0 Spend</span>';
   if (roas === null) return '<span class="badge badge-gray">-</span>';
   if (roas >= 2)    return '<span class="badge badge-green">ROAS ' + roas.toFixed(2) + 'x</span>';
   if (roas >= 1)    return '<span class="badge badge-yellow">ROAS ' + roas.toFixed(2) + 'x</span>';
@@ -2025,7 +2026,7 @@ function renderAdsTable() {
       <td>${r.orders !== null ? r.orders : '-'}</td>
       <td>${r.komisi !== null ? 'Rp ' + fmt(r.komisi) : '-'}</td>
       <td class="${r.roas !== null ? colorRoas(r.roas) : ''}">${roasTxt}</td>
-      <td>${getStatusBadge(r.roas, r.spent)}</td>
+      <td>${getStatusBadge(r.roas, r.spent, r.delivery)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="8" class="no-data">Tidak ada data ad</td></tr>';
 }
