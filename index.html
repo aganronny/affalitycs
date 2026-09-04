@@ -514,19 +514,24 @@
             </div>
             <input type="text" class="table-search" placeholder="Cari produk..." id="search-product" oninput="filterProductTable()" />
           </div>
+          <div class="product-table-hint" style="font-size:12px;color:var(--text-muted);margin:0 0 10px 4px;">
+            ℹ️ <em>Satu checkout (pesanan) dapat berisi lebih dari satu barang. Baris <strong>TOTAL</strong> di bawah menghitung pesanan unik riil yang cocok dengan kartu KPI.</em>
+          </div>
           <div class="table-wrap">
             <table id="tbl-product">
               <thead>
                 <tr>
                   <th onclick="sortTable('tbl-product',0)">Nama Produk ↕</th>
                   <th onclick="sortTable('tbl-product',1)">Kategori ↕</th>
-                  <th onclick="sortTable('tbl-product',2)">Orders ↕</th>
-                  <th onclick="sortTable('tbl-product',3)">Total Nilai (Rp) ↕</th>
-                  <th onclick="sortTable('tbl-product',4)">Komisi (Rp) ↕</th>
-                  <th onclick="sortTable('tbl-product',5)">Campaign</th>
+                  <th onclick="sortTable('tbl-product',2)">Terjual (Qty) ↕</th>
+                  <th onclick="sortTable('tbl-product',3)">Pesanan ↕</th>
+                  <th onclick="sortTable('tbl-product',4)">Total GMV (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-product',5)">Komisi (Rp) ↕</th>
+                  <th onclick="sortTable('tbl-product',6)">Campaign</th>
                 </tr>
               </thead>
               <tbody id="tbody-product"></tbody>
+              <tfoot id="tfoot-product"></tfoot>
             </table>
           </div>
         </div>

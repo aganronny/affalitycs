@@ -159,6 +159,10 @@ t("normalized match (beda spasi/huruf)", () => {
 t("fallback tag mentah kalau gak match sama sekali", () => {
   assert.deepStrictEqual(P.resolveShopeeKey({ tag1: 'zzz', tag3: '' }, fbSet, {}), { key: 'zzz', source: 'tag1_raw' });
 });
+t("tag3 diprioritaskan atau partial match", () => {
+  assert.deepStrictEqual(P.resolveShopeeKey({ tag1: 'shoes', tag3: 'cp02' }, fbSet, {}), { key: 'cp02', source: 'tag3' });
+  assert.deepStrictEqual(P.resolveShopeeKey({ tag1: 'shoes', tag3: 'cp02_promo' }, fbSet, {}), { key: 'cp02', source: 'tag3_partial' });
+});
 t("tag '-' tidak salah cocok ke campaign pertama", () => {
   assert.deepStrictEqual(P.resolveShopeeKey({ tag1: '-', tag3: '' }, fbSet, {}), { key: '(tidak ada tag)', source: 'none' });
   assert.deepStrictEqual(P.resolveShopeeKey({ tag1: '', tag3: '-' }, fbSet, {}), { key: '(tidak ada tag)', source: 'none' });
@@ -168,6 +172,8 @@ t("tag '-' tidak salah cocok ke campaign pertama", () => {
 console.log('resolveClickKey');
 t("'gacoan01----' -> exact via tag1", () =>
   assert.strictEqual(P.resolveClickKey('gacoan01----', new Set(['gacoan01']), {}), 'gacoan01'));
+t("'MINIFOG-meta-cp02--' -> exact via tag3", () =>
+  assert.strictEqual(P.resolveClickKey('MINIFOG-meta-cp02--', fbSet, {}), 'cp02'));
 t("mapping manual diprioritaskan", () =>
   assert.strictEqual(P.resolveClickKey('gacoan01----', new Set(), { gacoan01: 'Gacoan Ads' }), 'Gacoan Ads'));
 t("tag '-' atau kosong tidak salah cocok ke campaign pertama", () => {

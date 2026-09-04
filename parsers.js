@@ -183,40 +183,62 @@ function resolveClickKey(tagLink, fbNameSet, mapping) {
   let tag = String(tagLink || '').trim();
   if (!tag || tag === '-' || tag === '--') return '(tidak ada tag)';
   // Try direct match with mapping
-  if (mapping[tag]) return mapping[tag];
-  if (fbNameSet.has(tag)) return tag;
+  if (mapping && mapping[tag]) return mapping[tag];
+  if (fbNameSet && fbNameSet.has(tag)) return tag;
 
   // The click report Tag_link format is: TAG1-meta-TAG3-- (or TAG1-TAG1-TAG1--)
   // Commission report Tag_link1 = TAG1, Tag_link3 = TAG3
-  // So we extract tag1 from click report and match
   const parts = tag.split('-').filter(Boolean);
   const tag1 = parts[0] || '';
+  const tag3 = parts.length >= 3 ? parts[2] : (parts.length === 2 ? parts[1] : '');
+
+  if (tag3 && tag3 !== '-') {
+    if (mapping && mapping[tag3]) return mapping[tag3];
+    if (fbNameSet && fbNameSet.has(tag3)) return tag3;
+  }
   if (tag1 && tag1 !== '-') {
-    if (mapping[tag1]) return mapping[tag1];
-    if (fbNameSet.has(tag1)) return tag1;
+    if (mapping && mapping[tag1]) return mapping[tag1];
+    if (fbNameSet && fbNameSet.has(tag1)) return tag1;
   }
 
   // Normalized match (hanya jika ada tag valid)
   const normTag = normalizeName(tag);
   const normTag1 = normalizeName(tag1);
-  if (normTag || normTag1) {
-    for (const name of fbNameSet) {
-      const normName = normalizeName(name);
-      if (!normName) continue;
-      if (normTag && normName === normTag) return name;
-      if (normTag1 && normName === normTag1) return name;
-      if (normTag1 && (normName.includes(normTag1) || normTag1.includes(normName))) return name;
+  const normTag3 = normalizeName(tag3);
+  if (fbNameSet) {
+    if (normTag3) {
+      for (const name of fbNameSet) {
+        const normName = normalizeName(name);
+        if (!normName) continue;
+        if (normName === normTag3 || normName.includes(normTag3) || normTag3.includes(normName)) return name;
+      }
+    }
+    if (normTag || normTag1) {
+      for (const name of fbNameSet) {
+        const normName = normalizeName(name);
+        if (!normName) continue;
+        if (normTag && normName === normTag) return name;
+        if (normTag1 && normName === normTag1) return name;
+        if (normTag1 && (normName.includes(normTag1) || normTag1.includes(normName))) return name;
+      }
     }
   }
 
   // Check existing shopee tag mapping keys
-  if (normTag1) {
-    for (const [mKey, mVal] of Object.entries(mapping)) {
-      if (normalizeName(mKey) === normTag1 || tag1 === mKey) return mVal;
+  if (mapping) {
+    if (normTag3) {
+      for (const [mKey, mVal] of Object.entries(mapping)) {
+        if (normalizeName(mKey) === normTag3 || tag3 === mKey) return mVal;
+      }
+    }
+    if (normTag1) {
+      for (const [mKey, mVal] of Object.entries(mapping)) {
+        if (normalizeName(mKey) === normTag1 || tag1 === mKey) return mVal;
+      }
     }
   }
 
-  return (tag1 && tag1 !== '-') ? tag1 : (tag !== '-' ? tag : '(tidak ada tag)'); // fallback to tag1 or full tag
+  return (tag3 && tag3 !== '-') ? tag3 : (tag1 && tag1 !== '-') ? tag1 : (tag !== '-' ? tag : '(tidak ada tag)');
 }
 
 // --- PARSE FB ADS XLSX ------------------------------------------
@@ -545,6 +567,16 @@ function resolveShopeeKey(row, fbNameSet, mapping) {
     if (normTag3) {
       const match = [...fbNameSet].find(n => normalizeName(n) === normTag3);
       if (match) return { key: match, source: 'tag3_norm' };
+    }
+  }
+  if (tag3) {
+    const normTag3 = normalizeName(tag3);
+    if (normTag3) {
+      const match = [...fbNameSet].find(n => {
+        const normN = normalizeName(n);
+        return normN && (normN.includes(normTag3) || normTag3.includes(normN));
+      });
+      if (match) return { key: match, source: 'tag3_partial' };
     }
   }
   if (tag1) {

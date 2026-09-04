@@ -964,13 +964,14 @@ function buildCampaignData() {
 function renderKPIs() {
   const feePct = getTaxFeePct();
   const feeRatio = getTaxFeeRatio();
+  const isCountableActive = document.getElementById('valid-orders-toggle')?.checked !== false;
   const isCountable = r => isCountableOrder(r);
 
   // Sumber kebenaran Shopee:
   const activeShopee = state.filteredShopee || [];
   const countableRows = activeShopee.filter(isCountable);
   const totalOrders = new Set(countableRows.map(r => r.orderId)).size;
-  const totalKomisi = Math.round(activeShopee.reduce((s, r) => s + (r.komisiBersih || 0), 0));
+  const totalKomisi = Math.round(countableRows.reduce((s, r) => s + (r.komisiBersih || 0), 0));
 
   // Sumber kebenaran FB Spend:
   let rawSpend = 0;
@@ -985,7 +986,7 @@ function renderKPIs() {
   const overallRoas = totalSpent > 0 ? (totalKomisi / totalSpent) : null;
 
   const kpis = [
-    { label: 'Total Komisi Bersih', value: 'Rp ' + fmtK(totalKomisi), count: totalKomisi, format: 'rupiah', sub: 'dari semua order Shopee', color: 'green',
+    { label: 'Total Komisi Bersih', value: 'Rp ' + fmtK(totalKomisi), count: totalKomisi, format: 'rupiah', sub: isCountableActive ? 'order valid (cair & pending)' : 'semua order Shopee', color: 'green',
       badge: totalProfit >= 0 ? { text: 'Untung', cls: 'pos' } : { text: 'Rugi', cls: 'neg' } },
     { label: 'Total Spend Iklan', value: 'Rp ' + fmtK(totalSpent), count: totalSpent, format: 'rupiah', sub: feePct > 0 ? `Meta Ads (+${feePct}% Fee/Pajak)` : 'Meta Ads (tanpa fee/pajak)', color: 'orange' },
     { label: 'Profit / Loss', value: (totalProfit >= 0 ? 'Rp ' : '-Rp ') + fmtK(Math.abs(totalProfit)),
@@ -997,7 +998,7 @@ function renderKPIs() {
         : { text: '-' + fmtK(Math.abs(totalProfit)), cls: 'neg' }
     },
     { label: 'Overall ROAS', value: fmtRoas(overallRoas), count: overallRoas !== null && overallRoas !== undefined ? overallRoas : '', format: 'roas', sub: 'komisi / spend', color: overallRoas && overallRoas >= 2 ? 'green' : (overallRoas && overallRoas >= 1 ? 'blue' : 'orange') },
-    { label: 'Total Pesanan', value: fmt(totalOrders), count: totalOrders, format: 'plain', sub: 'unique order valid', color: 'blue' },
+    { label: 'Total Pesanan', value: fmt(totalOrders), count: totalOrders, format: 'plain', sub: isCountableActive ? 'unique order valid' : 'semua unique order', color: 'blue' },
   ];
 
   document.getElementById('kpi-grid').innerHTML = kpis.map(k => `
@@ -1147,34 +1148,38 @@ function computeMasterTableRows() {
   const feeRatio = getTaxFeeRatio();
   const hasAds = state.filteredFbAds && state.filteredFbAds.length > 0;
 
-  // 1. Kumpulkan penjualan per Tag dari data Shopee
-  const salesByTag = {};
+  // Target FB Name Set untuk matching otomatis
+  const fbNameSet = new Set([
+    ...(hasAds ? (state.filteredFbAds || []).map(a => a.adName) : []),
+    ...(hasAds ? (state.filteredFbAds || []).map(a => a.campaignName) : []),
+    ...(!hasAds ? (state.filteredFb || []).map(c => c.campaignName) : [])
+  ].filter(Boolean));
+
+  // 1. Kumpulkan penjualan Shopee per resolved key (hanya order valid bila toggle aktif)
+  const salesByKey = {};
   (state.filteredShopee || []).forEach(r => {
-    let tag = (r.tag1 || '').trim();
-    if (!tag || tag === '-' || tag === '--') tag = (r.tag3 || '').trim();
-    if (!tag || tag === '-' || tag === '--') tag = '(tanpa tag)';
-    if (!salesByTag[tag]) salesByTag[tag] = { orders: new Set(), komisi: 0 };
-    if (isCountableOrder(r)) salesByTag[tag].orders.add(r.orderId);
-    salesByTag[tag].komisi += (r.komisiBersih || 0);
+    if (!isCountableOrder(r)) return;
+    const { key } = resolveShopeeKey(r, fbNameSet, state.mapping || {});
+    if (!salesByKey[key]) salesByKey[key] = { orders: new Set(), komisi: 0, gmv: 0, rows: 0 };
+    salesByKey[key].orders.add(r.orderId);
+    salesByKey[key].komisi += (r.komisiBersih || 0);
+    salesByKey[key].gmv += (r.nilaiPembelian || 0);
+    salesByKey[key].rows++;
   });
 
-  // 2. Kumpulkan klik Shopee per Tag dari Click Report
-  const clicksByTag = {};
+  // 2. Kumpulkan klik Shopee per resolved key dari Click Report
+  const clicksByKey = {};
   (state.filteredClicks || []).forEach(c => {
-    const t = (c.tag1 || c.tagLink || '').trim();
-    if (t && t !== '-' && t !== '--') {
-      if (!clicksByTag[t]) clicksByTag[t] = { total: 0, fromFacebook: 0 };
-      clicksByTag[t].total++;
-      if (c.perujuk === 'Facebook') clicksByTag[t].fromFacebook++;
-    }
+    const key = resolveClickKey(c.tagLink, fbNameSet, state.mapping || {});
+    if (!clicksByKey[key]) clicksByKey[key] = { total: 0, fromFacebook: 0 };
+    clicksByKey[key].total++;
+    if (c.perujuk === 'Facebook') clicksByKey[key].fromFacebook++;
   });
-
-  const allTags = [...new Set([...Object.keys(salesByTag), ...Object.keys(clicksByTag)])];
 
   if (hasAds) {
     // Agregasi ad-level
     const byAd = {};
-    state.filteredFbAds.forEach(a => {
+    (state.filteredFbAds || []).forEach(a => {
       const k = a.adName || '(tanpa nama)';
       if (!byAd[k]) {
         byAd[k] = {
@@ -1193,63 +1198,18 @@ function computeMasterTableRows() {
       if (a.delivery) byAd[k].delivery = a.delivery;
     });
 
-    const adToTag = {};
-    const boundTags = new Set();
-
-    // Pass 1: Manual Mapping
-    Object.keys(byAd).forEach(adName => {
-      if (state.mapping && state.mapping[adName] && salesByTag[state.mapping[adName]]) {
-        adToTag[adName] = state.mapping[adName];
-        boundTags.add(state.mapping[adName]);
-      }
-    });
-
-    // Pass 2: Exact Match (prioritas tertinggi)
-    Object.keys(byAd).forEach(adName => {
-      if (adToTag[adName]) return;
-      const exact = allTags.find(t => t.toLowerCase() === adName.toLowerCase());
-      if (exact && !boundTags.has(exact)) {
-        adToTag[adName] = exact;
-        boundTags.add(exact);
-      }
-    });
-
-    // Pass 3: Prefix Match (hanya untuk ad & tag yang belum terikat, mencegah komisi terhitung ganda)
-    Object.keys(byAd).forEach(adName => {
-      if (adToTag[adName]) return;
-      const lower = adName.toLowerCase();
-      const nAd = normalizeName(adName);
-      for (const t of allTags) {
-        if (boundTags.has(t)) continue;
-        const lt = t.toLowerCase();
-        const nT = normalizeName(t);
-        if (!nT) continue;
-        let hit = false;
-        const i = lower.indexOf(lt);
-        if (i >= 0 && !/\d/.test(lower.charAt(i + lt.length))) hit = true;
-        if (!hit) {
-          const j = nAd.indexOf(nT);
-          if (j >= 0 && !/\d/.test(nAd.charAt(j + nT.length))) hit = true;
-        }
-        if (hit) {
-          adToTag[adName] = t;
-          boundTags.add(t);
-          break;
-        }
-      }
-    });
-
+    const boundKeys = new Set();
     const rows = Object.values(byAd).map(a => {
-      const tag = adToTag[a.adName] || null;
-      const sale = tag ? salesByTag[tag] : null;
+      boundKeys.add(a.adName);
+      const sale = salesByKey[a.adName] || null;
       const orders = sale ? sale.orders.size : 0;
-      const komisi = sale ? sale.komisi : 0;
+      const komisi = sale ? Math.round(sale.komisi) : 0;
       const spent = Math.round(a.spent * feeRatio);
       const profit = Math.round(komisi - spent);
       const roas = spent > 0 ? (komisi / spent) : null;
       const cpo = (spent > 0 && orders > 0) ? Math.round(spent / orders) : null;
 
-      const cData = tag ? (clicksByTag[tag] || null) : null;
+      const cData = clicksByKey[a.adName] || null;
       const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : a.landingPageViews;
       const dropPct = (a.linkClicks > 0 && shopeeClicks !== null)
         ? Math.max(0, ((a.linkClicks - shopeeClicks) / a.linkClicks * 100))
@@ -1261,7 +1221,7 @@ function computeMasterTableRows() {
         campaignDisplay: a.campaignName,
         adSetDisplay: a.adSetName,
         adDisplay: a.adName,
-        tagDisplay: tag || '-',
+        tagDisplay: a.adName,
         spent,
         linkClicks: a.linkClicks,
         shopeeClicks,
@@ -1269,7 +1229,7 @@ function computeMasterTableRows() {
         cpcFb,
         realCpc,
         orders,
-        komisi: Math.round(komisi),
+        komisi,
         profit,
         roas,
         cpo,
@@ -1277,41 +1237,42 @@ function computeMasterTableRows() {
       };
     });
 
-    // Tambahkan penjualan Shopee yang tidak terafiliasi ke Iklan FB (Organik / Tag Bebas)
-    allTags.forEach(tag => {
-      if (!boundTags.has(tag) && salesByTag[tag] && salesByTag[tag].komisi > 0) {
-        const sale = salesByTag[tag];
-        const cData = clicksByTag[tag] || null;
+    // Tambahkan penjualan Shopee / Klik yang tidak terafiliasi ke Iklan FB (Organik / Tag Bebas)
+    // Pastikan tag dengan komisi 0 namun memiliki order/klik tetap disertakan!
+    const allUnbound = new Set([...Object.keys(salesByKey), ...Object.keys(clicksByKey)]);
+    allUnbound.forEach(tag => {
+      if (!boundKeys.has(tag)) {
+        const sale = salesByKey[tag] || null;
+        const orders = sale ? sale.orders.size : 0;
+        const komisi = sale ? Math.round(sale.komisi) : 0;
+        const cData = clicksByKey[tag] || null;
         const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : 0;
-        rows.push({
-          campaignDisplay: 'Organik / Tanpa Iklan FB',
-          adSetDisplay: '-',
-          adDisplay: '(Organik) ' + tag,
-          tagDisplay: tag,
-          spent: 0,
-          linkClicks: 0,
-          shopeeClicks,
-          dropPct: null,
-          cpcFb: null,
-          realCpc: null,
-          orders: sale.orders.size,
-          komisi: Math.round(sale.komisi),
-          profit: Math.round(sale.komisi),
-          roas: null,
-          cpo: null,
-          delivery: 'organic',
-        });
+        if (orders > 0 || komisi > 0 || shopeeClicks > 0) {
+          rows.push({
+            campaignDisplay: 'Organik / Tanpa Iklan FB',
+            adSetDisplay: '-',
+            adDisplay: '(Organik) ' + tag,
+            tagDisplay: tag,
+            spent: 0,
+            linkClicks: 0,
+            shopeeClicks,
+            dropPct: null,
+            cpcFb: null,
+            realCpc: null,
+            orders,
+            komisi,
+            profit: komisi,
+            roas: null,
+            cpo: null,
+            delivery: 'organic',
+          });
+        }
       }
     });
 
     return rows.sort((a, b) => {
-      // Default Sort: Spend (Rp) terbesar (Standar Meta Ads Manager), lalu Komisi / Klik
-      if ((b.spent || 0) !== (a.spent || 0)) {
-        return (b.spent || 0) - (a.spent || 0);
-      }
-      if ((b.komisi || 0) !== (a.komisi || 0)) {
-        return (b.komisi || 0) - (a.komisi || 0);
-      }
+      if ((b.spent || 0) !== (a.spent || 0)) return (b.spent || 0) - (a.spent || 0);
+      if ((b.komisi || 0) !== (a.komisi || 0)) return (b.komisi || 0) - (a.komisi || 0);
       return (b.linkClicks || 0) - (a.linkClicks || 0);
     });
   } else {
@@ -1327,46 +1288,18 @@ function computeMasterTableRows() {
       byCamp[k].landingPageViews += (c.landingPageViews || 0);
     });
 
-    const campToTag = {};
-    const boundTags = new Set();
-    Object.keys(byCamp).forEach(cn => {
-      if (state.mapping && state.mapping[cn] && salesByTag[state.mapping[cn]]) {
-        campToTag[cn] = state.mapping[cn];
-        boundTags.add(state.mapping[cn]);
-      }
-    });
-    Object.keys(byCamp).forEach(cn => {
-      if (campToTag[cn]) return;
-      const exact = allTags.find(t => t.toLowerCase() === cn.toLowerCase());
-      if (exact && !boundTags.has(exact)) {
-        campToTag[cn] = exact;
-        boundTags.add(exact);
-      }
-    });
-    Object.keys(byCamp).forEach(cn => {
-      if (campToTag[cn]) return;
-      const lower = cn.toLowerCase();
-      for (const t of allTags) {
-        if (boundTags.has(t)) continue;
-        if (lower.includes(t.toLowerCase())) {
-          campToTag[cn] = t;
-          boundTags.add(t);
-          break;
-        }
-      }
-    });
-
+    const boundKeys = new Set();
     const rows = Object.values(byCamp).map(c => {
-      const tag = campToTag[c.campaignName] || null;
-      const sale = tag ? salesByTag[tag] : null;
+      boundKeys.add(c.campaignName);
+      const sale = salesByKey[c.campaignName] || null;
       const orders = sale ? sale.orders.size : 0;
-      const komisi = sale ? sale.komisi : 0;
+      const komisi = sale ? Math.round(sale.komisi) : 0;
       const spent = Math.round(c.spent * feeRatio * (state.dateRatio || 1));
       const profit = Math.round(komisi - spent);
       const roas = spent > 0 ? (komisi / spent) : null;
       const cpo = (spent > 0 && orders > 0) ? Math.round(spent / orders) : null;
 
-      const cData = tag ? (clicksByTag[tag] || null) : null;
+      const cData = clicksByKey[c.campaignName] || null;
       const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : c.landingPageViews;
       const dropPct = (c.linkClicks > 0 && shopeeClicks !== null)
         ? Math.max(0, ((c.linkClicks - shopeeClicks) / c.linkClicks * 100))
@@ -1378,7 +1311,7 @@ function computeMasterTableRows() {
         campaignDisplay: c.campaignName,
         adSetDisplay: '-',
         adDisplay: '-',
-        tagDisplay: tag || '-',
+        tagDisplay: c.campaignName,
         spent,
         linkClicks: c.linkClicks,
         shopeeClicks,
@@ -1386,7 +1319,7 @@ function computeMasterTableRows() {
         cpcFb,
         realCpc,
         orders,
-        komisi: Math.round(komisi),
+        komisi,
         profit,
         roas,
         cpo,
@@ -1394,40 +1327,40 @@ function computeMasterTableRows() {
       };
     });
 
-    allTags.forEach(tag => {
-      if (!boundTags.has(tag) && salesByTag[tag] && salesByTag[tag].komisi > 0) {
-        const sale = salesByTag[tag];
-        const cData = clicksByTag[tag] || null;
+    const allUnbound = new Set([...Object.keys(salesByKey), ...Object.keys(clicksByKey)]);
+    allUnbound.forEach(tag => {
+      if (!boundKeys.has(tag)) {
+        const sale = salesByKey[tag] || null;
+        const orders = sale ? sale.orders.size : 0;
+        const komisi = sale ? Math.round(sale.komisi) : 0;
+        const cData = clicksByKey[tag] || null;
         const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : 0;
-        rows.push({
-          campaignDisplay: 'Organik / Tanpa Iklan FB',
-          adSetDisplay: '-',
-          adDisplay: '(Organik) ' + tag,
-          tagDisplay: tag,
-          spent: 0,
-          linkClicks: 0,
-          shopeeClicks,
-          dropPct: null,
-          cpcFb: null,
-          realCpc: null,
-          orders: sale.orders.size,
-          komisi: Math.round(sale.komisi),
-          profit: Math.round(sale.komisi),
-          roas: null,
-          cpo: null,
-          delivery: 'organic',
-        });
+        if (orders > 0 || komisi > 0 || shopeeClicks > 0) {
+          rows.push({
+            campaignDisplay: 'Organik / Tanpa Iklan FB',
+            adSetDisplay: '-',
+            adDisplay: '(Organik) ' + tag,
+            tagDisplay: tag,
+            spent: 0,
+            linkClicks: 0,
+            shopeeClicks,
+            dropPct: null,
+            cpcFb: null,
+            realCpc: null,
+            orders,
+            komisi,
+            profit: komisi,
+            roas: null,
+            cpo: null,
+            delivery: 'organic',
+          });
+        }
       }
     });
 
     return rows.sort((a, b) => {
-      // Default Sort: Spend (Rp) terbesar (Standar Meta Ads Manager), lalu Komisi / Klik
-      if ((b.spent || 0) !== (a.spent || 0)) {
-        return (b.spent || 0) - (a.spent || 0);
-      }
-      if ((b.komisi || 0) !== (a.komisi || 0)) {
-        return (b.komisi || 0) - (a.komisi || 0);
-      }
+      if ((b.spent || 0) !== (a.spent || 0)) return (b.spent || 0) - (a.spent || 0);
+      if ((b.komisi || 0) !== (a.komisi || 0)) return (b.komisi || 0) - (a.komisi || 0);
       return (b.linkClicks || 0) - (a.linkClicks || 0);
     });
   }
@@ -1447,16 +1380,20 @@ function renderFunnelSummary(campaigns, masterRows) {
     const totalSpent     = withFb.reduce((s, r) => s + (r.spent || 0), 0);
     const totalFbClicks  = withFb.reduce((s, r) => s + (r.linkClicks || r.fbLinkClicks || 0), 0);
     const totalShopeeClk = withFb.reduce((s, r) => s + (r.shopeeClicks || r.stage2Value || 0), 0);
-    const totalOrders    = withFb.reduce((s, r) => s + (r.orders || 0), 0);
+    const totalFbOrders  = withFb.reduce((s, r) => s + (r.orders || 0), 0);
+    const totalAllOrders = (masterRows && masterRows.length > 0)
+      ? masterRows.reduce((s, r) => s + (r.orders || 0), 0)
+      : campaigns.reduce((s, c) => s + (c.orders || 0), 0);
+    const organicOrders  = Math.max(0, totalAllOrders - totalFbOrders);
 
     const dropStage1     = Math.max(0, totalFbClicks - totalShopeeClk);
     const dropStage1Pct  = totalFbClicks > 0 ? (dropStage1 / totalFbClicks * 100) : 0;
-    const shopeeCvr      = totalShopeeClk > 0 ? (totalOrders / totalShopeeClk * 100) : 0;
-    const overallConv    = totalFbClicks > 0 ? (totalOrders / totalFbClicks * 100) : 0;
+    const shopeeCvr      = totalShopeeClk > 0 ? (totalFbOrders / totalShopeeClk * 100) : 0;
+    const overallConv    = totalFbClicks > 0 ? (totalFbOrders / totalFbClicks * 100) : 0;
 
     const cpcFb          = (totalFbClicks > 0 && totalSpent > 0) ? Math.round(totalSpent / totalFbClicks) : null;
     const realCpc        = (totalShopeeClk > 0 && totalSpent > 0) ? Math.round(totalSpent / totalShopeeClk) : null;
-    const cpo            = (totalOrders > 0 && totalSpent > 0) ? Math.round(totalSpent / totalOrders) : null;
+    const cpo            = (totalFbOrders > 0 && totalSpent > 0) ? Math.round(totalSpent / totalFbOrders) : null;
 
     const cpcFbTxt       = cpcFb !== null ? 'Rp ' + fmt(cpcFb) : '-';
     const realCpcTxt     = realCpc !== null ? 'Rp ' + fmt(realCpc) : '-';
@@ -1507,19 +1444,20 @@ function renderFunnelSummary(campaigns, masterRows) {
         <div class="connector-arrow">➔</div>
         <div class="connector-pill pill-cvr">
           <div class="pill-top">🛒 Shopee CVR ${shopeeCvr.toFixed(2)}%</div>
-          <div class="pill-mid"><strong>${fmt(totalOrders)}</strong> pesanan dari <strong>${fmt(totalShopeeClk)}</strong> pengunjung</div>
-          <div class="pill-bot">rasio pesanan per pengunjung Shopee</div>
+          <div class="pill-mid"><strong>${fmt(totalFbOrders)}</strong> pesanan dari <strong>${fmt(totalShopeeClk)}</strong> pengunjung</div>
+          <div class="pill-bot">rasio order per pengunjung Shopee</div>
         </div>
       </div>
 
       <div class="funnel-step step-order">
         <div class="funnel-step-header">
           <span class="funnel-step-badge badge-order">Tahap 3</span>
-          <span class="funnel-cost-tag">CPO: ${cpoTxt}</span>
+          <span class="funnel-cost-tag">CPO Iklan: ${cpoTxt}</span>
         </div>
-        <div class="funnel-step-title">Pesanan Masuk (Order)</div>
-        <div class="funnel-step-value" style="color:#10b981">${fmt(totalOrders)}</div>
-        <div class="funnel-step-sub">Total CVR: <strong>${overallConv.toFixed(2)}%</strong> dari total klik FB</div>
+        <div class="funnel-step-title">Pesanan dari Iklan (FB)</div>
+        <div class="funnel-step-value" style="color:#10b981">${fmt(totalFbOrders)} <span style="font-size:13px;font-weight:500;color:var(--text-muted)">/ ${fmt(totalAllOrders)} total</span></div>
+        <div class="funnel-step-sub">Total CVR Iklan: <strong>${overallConv.toFixed(2)}%</strong> dari total klik FB</div>
+        ${organicOrders > 0 ? `<div style="font-size:11px;color:#10b981;margin-top:4px;font-weight:600;">+${fmt(organicOrders)} pesanan organik Shopee</div>` : ''}
       </div>
     `;
     clSummary.style.display = 'flex';
@@ -1565,8 +1503,11 @@ function renderRoasBarChart(campaigns) {
   const ctxRoas = document.getElementById('chart-roas');
   if (!ctxRoas) return;
   const canvas = ensureCanvas(ctxRoas);
-  const labels   = campaigns.map(c => c.name);
-  const roasVals = campaigns.map(c => c.roas !== null ? +c.roas.toFixed(2) : 0);
+  // Hanya tampilkan campaign/ad yang berbayar (spent > 0)
+  const paidCampaigns = campaigns.filter(c => (c.spent || 0) > 0);
+  const targetCampaigns = paidCampaigns.length > 0 ? paidCampaigns : campaigns;
+  const labels   = targetCampaigns.map(c => c.name);
+  const roasVals = targetCampaigns.map(c => c.roas !== null ? +c.roas.toFixed(2) : 0);
   const colors   = roasVals.map(v => v >= 2 ? '#10b981' : v >= 1 ? '#f59e0b' : '#ef4444');
   state.charts['roas'] = new Chart(canvas, {
     type: 'bar',
@@ -1694,20 +1635,37 @@ function computeProductRows() {
     ...state.filteredFb.map(c => c.campaignName),
     ...(state.filteredFbAds || []).map(a => a.adName)
   ].filter(Boolean));
-  // Kelompokkan per ID Barang (konsisten lintas varian/judul), bukan per nama.
-  // Nama yang ditampilkan = judul terpanjang (judul asli bisa sedikit beda antar baris).
-  state.filteredShopee.forEach(r => {
+
+  (state.filteredShopee || []).forEach(r => {
+    if (!isCountableOrder(r)) return;
     const id = r.idBarang || r.barang || '(tidak diketahui)';
-    if (!byProduct[id]) byProduct[id] = { name: r.barang || '(tidak diketahui)', kategori: r.kategori1 || '-', orders: new Set(), nilai: 0, komisi: 0, campaigns: new Set() };
+    if (!byProduct[id]) {
+      byProduct[id] = {
+        name: r.barang || '(tidak diketahui)',
+        kategori: r.kategori1 || '-',
+        qty: 0,
+        orders: new Set(),
+        nilai: 0,
+        komisi: 0,
+        campaigns: new Set()
+      };
+    }
     if (r.barang && r.barang.length > byProduct[id].name.length) byProduct[id].name = r.barang;
-    if (isCountableOrder(r)) byProduct[id].orders.add(r.orderId);
-    byProduct[id].nilai  += r.nilaiPembelian;
-    byProduct[id].komisi += r.komisiBersih;
-    const { key: campKey } = resolveShopeeKey(r, fbNameSet, state.mapping);
-    byProduct[id].campaigns.add(campKey);
+    byProduct[id].qty += (r.jumlah || 1);
+    byProduct[id].orders.add(r.orderId);
+    byProduct[id].nilai  += (r.nilaiPembelian || 0);
+    byProduct[id].komisi += (r.komisiBersih || 0);
+    const { key: campKey } = resolveShopeeKey(r, fbNameSet, state.mapping || {});
+    if (campKey && campKey !== '(tidak ada tag)') byProduct[id].campaigns.add(campKey);
   });
   return Object.values(byProduct)
-    .map(p => ({ ...p, orders: p.orders.size, campaigns: [...p.campaigns] }))
+    .map(p => ({
+      ...p,
+      orders: p.orders.size,
+      orderCount: p.orders.size,
+      orderIds: [...p.orders],
+      campaigns: [...p.campaigns]
+    }))
     .sort((a, b) => b.orders - a.orders || b.komisi - a.komisi);
 }
 
@@ -1723,11 +1681,31 @@ function renderProductTab() {
     tbody.innerHTML = products.map(p => `<tr>
       <td style="max-width:260px;white-space:normal;line-height:1.4">${esc(p.name)}</td>
       <td>${esc(p.kategori)}</td>
-      <td><strong>${p.orders}</strong></td>
+      <td><strong>${fmt(p.qty)}</strong></td>
+      <td><strong>${p.orderCount}</strong></td>
       <td>Rp ${fmt(p.nilai)}</td>
       <td>Rp ${fmt(p.komisi)}</td>
       <td style="max-width:160px;white-space:normal">${p.campaigns.slice(0,3).map(c => `<span class="badge badge-blue clickable-badge" onclick="filterProductByCampaign('${esc(c)}')" title="Filter campaign ini">${esc(c)}</span>`).join(' ')}</td>
-    </tr>`).join('') || `<tr><td colspan="6" class="no-data">Tidak ada produk${state.activeProductCampaignFilter ? ` untuk campaign "${esc(state.activeProductCampaignFilter)}"` : ''}</td></tr>`;
+    </tr>`).join('') || `<tr><td colspan="7" class="no-data">Tidak ada produk${state.activeProductCampaignFilter ? ` untuk campaign "${esc(state.activeProductCampaignFilter)}"` : ''}</td></tr>`;
+  }
+
+  const tfoot = document.getElementById('tfoot-product');
+  if (tfoot) {
+    const totalQty = products.reduce((s, p) => s + (p.qty || 0), 0);
+    const sumItemOrders = products.reduce((s, p) => s + (p.orderCount || 0), 0);
+    const uniqueOrders = new Set(products.flatMap(p => p.orderIds || [])).size;
+    const totalNilai = products.reduce((s, p) => s + (p.nilai || 0), 0);
+    const totalKomisi = products.reduce((s, p) => s + (p.komisi || 0), 0);
+
+    tfoot.innerHTML = `<tr>
+      <td><strong>TOTAL (${products.length} Produk)</strong></td>
+      <td>-</td>
+      <td><strong>${fmt(totalQty)} pcs</strong></td>
+      <td><strong>${fmt(uniqueOrders)} order unik</strong><div style="font-size:10px;color:var(--text-muted);font-weight:400">(${sumItemOrders} pesanan produk)</div></td>
+      <td><strong>Rp ${fmt(totalNilai)}</strong></td>
+      <td><strong>Rp ${fmt(totalKomisi)}</strong></td>
+      <td>-</td>
+    </tr>`;
   }
 }
 
@@ -2262,7 +2240,7 @@ function exportExcel() {
 
     // Per Produk
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(computeProductRows().map(p => ({
-      Produk: p.name, Kategori: p.kategori, Orders: p.orders,
+      Produk: p.name, Kategori: p.kategori, Qty: p.qty, Orders: p.orders,
       Nilai_Pembelian: Math.round(p.nilai), Komisi: Math.round(p.komisi),
       Campaign: p.campaigns.join(', '),
     }))), 'Per Produk');
@@ -2609,7 +2587,7 @@ function loadDemoData() {
       const status = statuses[Math.floor(Math.random() * statuses.length)];
       const komisi = Math.round(prod[2] * 0.02 + Math.random() * prod[2] * 0.03);
       csvLines.push(
-        `${orderId};${status};2291870000000;${dateStr} ${10+Math.floor(Math.random()*12)}:${String(Math.floor(Math.random()*59)).padStart(2,'0')};;${dateStr} ${8+Math.floor(Math.random()*10)}:00;DemoStore;12345;Preferred(Non-CB);PROD123;${prod[0]};MODEL1;Normal Product;;${prod[1]};;;${prod[2]};1;Komisi Shopee;;${prod[2]};;1.50%;${(prod[2]*0.015).toFixed(0)};2.00%;${(prod[2]*0.02).toFixed(0)};${(prod[2]*0.035).toFixed(0)};${(prod[2]*0.015).toFixed(0)};${(prod[2]*0.02).toFixed(0)};${(prod[2]*0.035).toFixed(0)};;;0.00%;0;100.00%;${komisi};Aktif;-;Pesanan dari Toko yang tidak Dipromosikan;Ada;DemoTag;meta;${cp};;;Facebook`
+        `${orderId};${status};2291870000000;${dateStr} ${10+Math.floor(Math.random()*12)}:${String(Math.floor(Math.random()*59)).padStart(2,'0')};;${dateStr} ${8+Math.floor(Math.random()*10)}:00;DemoStore;12345;Preferred(Non-CB);PROD123;${prod[0]};MODEL1;Normal Product;;${prod[1]};;;${prod[2]};1;Komisi Shopee;;${prod[2]};;1.50%;${(prod[2]*0.015).toFixed(0)};2.00%;${(prod[2]*0.02).toFixed(0)};${(prod[2]*0.035).toFixed(0)};${(prod[2]*0.015).toFixed(0)};${(prod[2]*0.02).toFixed(0)};${(prod[2]*0.035).toFixed(0)};;;0.00%;0;100.00%;${komisi};Aktif;-;Pesanan dari Toko yang tidak Dipromosikan;Ada;${cp};meta;${cp};;;Facebook`
       );
       orderCounter++;
     }
@@ -2628,7 +2606,7 @@ function loadDemoData() {
     campaignName: d.name, spent: d.spent, reach: d.reach,
     impressions: d.impressions, linkClicks: d.linkClicks,
     cpc: d.cpc, cpm: d.cpm, ctr: d.ctr,
-    landingPageViews: d.linkClicks, budget: d.budget, delivery: 'active'
+    landingPageViews: Math.round(d.linkClicks * 0.78), budget: d.budget, delivery: 'active'
   }));
 
   state.mapping = {};
