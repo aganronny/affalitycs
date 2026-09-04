@@ -1221,7 +1221,7 @@ function computeMasterTableRows() {
       const cData = clicksByKey[a.adName] || 
         (a.adSetName && a.adSetName !== '-' ? clicksByKey[a.adSetName] : null) || 
         (a.campaignName && a.campaignName !== '-' ? clicksByKey[a.campaignName] : null) || null;
-      const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : a.landingPageViews;
+      const shopeeClicks = cData ? cData.total : a.landingPageViews;
       const dropPct = (a.linkClicks > 0 && shopeeClicks !== null)
         ? Math.max(0, ((a.linkClicks - shopeeClicks) / a.linkClicks * 100))
         : null;
@@ -1257,7 +1257,7 @@ function computeMasterTableRows() {
         const orders = sale ? sale.orders.size : 0;
         const komisi = sale ? Math.round(sale.komisi) : 0;
         const cData = clicksByKey[tag] || null;
-        const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : 0;
+        const shopeeClicks = cData ? cData.total : 0;
         if (orders > 0 || komisi > 0) {
           rows.push({
             campaignDisplay: 'Organik / Tanpa Iklan FB',
@@ -1311,7 +1311,7 @@ function computeMasterTableRows() {
       const cpo = (spent > 0 && orders > 0) ? Math.round(spent / orders) : null;
 
       const cData = clicksByKey[c.campaignName] || null;
-      const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : c.landingPageViews;
+      const shopeeClicks = cData ? cData.total : c.landingPageViews;
       const dropPct = (c.linkClicks > 0 && shopeeClicks !== null)
         ? Math.max(0, ((c.linkClicks - shopeeClicks) / c.linkClicks * 100))
         : null;
@@ -1345,7 +1345,7 @@ function computeMasterTableRows() {
         const orders = sale ? sale.orders.size : 0;
         const komisi = sale ? Math.round(sale.komisi) : 0;
         const cData = clicksByKey[tag] || null;
-        const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : 0;
+        const shopeeClicks = cData ? cData.total : 0;
         if (orders > 0 || komisi > 0) {
           rows.push({
             campaignDisplay: 'Organik / Tanpa Iklan FB',
@@ -1393,7 +1393,9 @@ function renderFunnelSummary(campaigns, masterRows) {
   // Sumber kebenaran corong: seluruh baris kampanye/iklan terfilter
   const totalSpent     = rows.reduce((s, r) => s + (r.spent || 0), 0);
   const totalFbClicks  = rows.reduce((s, r) => s + (r.linkClicks || r.fbLinkClicks || 0), 0);
-  const totalShopeeClk = rows.reduce((s, r) => s + (r.shopeeClicks || r.stage2Value || 0), 0);
+  const totalShopeeClk = (state.filteredClicks && state.filteredClicks.length > 0)
+    ? state.filteredClicks.length
+    : rows.reduce((s, r) => s + (r.shopeeClicks || r.stage2Value || 0), 0);
   
   // Total order valid unik (sinkron 100% dengan Kartu KPI dan Master Table)
   const countableShopee = (state.filteredShopee || []).filter(r => isCountableOrder(r));
