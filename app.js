@@ -407,6 +407,7 @@ async function runAnalysis() {
     const fbNameSet = new Set([
       ...state.fbCampaigns.map(c => c.campaignName),
       ...(state.fbAds || []).map(a => a.adName),
+      ...(state.fbAds || []).map(a => a.adSetName),
       ...(state.fbAds || []).map(a => a.campaignName)
     ].filter(Boolean));
     const savedMapping = loadMapping();
@@ -517,7 +518,9 @@ function skipMapping() {
 function openMapping() {
   const fbNameSet = new Set([
     ...state.fbCampaigns.map(c => c.campaignName),
-    ...(state.fbAds || []).map(a => a.adName)
+    ...(state.fbAds || []).map(a => a.adName),
+    ...(state.fbAds || []).map(a => a.adSetName),
+    ...(state.fbAds || []).map(a => a.campaignName)
   ].filter(Boolean));
   const allTags = new Set();
   state.shopeeRows.forEach(r => {
@@ -950,7 +953,7 @@ function buildCampaignData() {
     dropClickToShopee: (r.linkClicks > 0 && r.shopeeClicks !== null) ? Math.max(0, r.linkClicks - r.shopeeClicks) : 0,
     cpcShopee: r.realCpc,
     komisiPerOrder: r.orders > 0 ? (r.komisi / r.orders) : null,
-    fb: {
+    fb: r.delivery === 'organic' ? null : {
       spent: r.spent,
       linkClicks: r.linkClicks,
       cpc: r.cpcFb,
@@ -1151,6 +1154,7 @@ function computeMasterTableRows() {
   // Target FB Name Set untuk matching otomatis
   const fbNameSet = new Set([
     ...(hasAds ? (state.filteredFbAds || []).map(a => a.adName) : []),
+    ...(hasAds ? (state.filteredFbAds || []).map(a => a.adSetName) : []),
     ...(hasAds ? (state.filteredFbAds || []).map(a => a.campaignName) : []),
     ...(!hasAds ? (state.filteredFb || []).map(c => c.campaignName) : [])
   ].filter(Boolean));
@@ -1201,7 +1205,12 @@ function computeMasterTableRows() {
     const boundKeys = new Set();
     const rows = Object.values(byAd).map(a => {
       boundKeys.add(a.adName);
-      const sale = salesByKey[a.adName] || null;
+      if (a.adSetName && a.adSetName !== '-') boundKeys.add(a.adSetName);
+      if (a.campaignName && a.campaignName !== '-') boundKeys.add(a.campaignName);
+
+      const sale = salesByKey[a.adName] || 
+        (a.adSetName && a.adSetName !== '-' ? salesByKey[a.adSetName] : null) || 
+        (a.campaignName && a.campaignName !== '-' ? salesByKey[a.campaignName] : null) || null;
       const orders = sale ? sale.orders.size : 0;
       const komisi = sale ? Math.round(sale.komisi) : 0;
       const spent = Math.round(a.spent * feeRatio);
@@ -1209,7 +1218,9 @@ function computeMasterTableRows() {
       const roas = spent > 0 ? (komisi / spent) : null;
       const cpo = (spent > 0 && orders > 0) ? Math.round(spent / orders) : null;
 
-      const cData = clicksByKey[a.adName] || null;
+      const cData = clicksByKey[a.adName] || 
+        (a.adSetName && a.adSetName !== '-' ? clicksByKey[a.adSetName] : null) || 
+        (a.campaignName && a.campaignName !== '-' ? clicksByKey[a.campaignName] : null) || null;
       const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : a.landingPageViews;
       const dropPct = (a.linkClicks > 0 && shopeeClicks !== null)
         ? Math.max(0, ((a.linkClicks - shopeeClicks) / a.linkClicks * 100))
@@ -1237,9 +1248,9 @@ function computeMasterTableRows() {
       };
     });
 
-    // Tambahkan penjualan Shopee / Klik yang tidak terafiliasi ke Iklan FB (Organik / Tag Bebas)
-    // Pastikan tag dengan komisi 0 namun memiliki order/klik tetap disertakan!
-    const allUnbound = new Set([...Object.keys(salesByKey), ...Object.keys(clicksByKey)]);
+    // Tambahkan penjualan Shopee yang tidak terafiliasi ke Iklan FB (Organik / Tag Bebas)
+    // Hanya masukkan jika memiliki pesanan atau komisi riil (bukan klik nyasar kosong)
+    const allUnbound = new Set(Object.keys(salesByKey));
     allUnbound.forEach(tag => {
       if (!boundKeys.has(tag)) {
         const sale = salesByKey[tag] || null;
@@ -1247,7 +1258,7 @@ function computeMasterTableRows() {
         const komisi = sale ? Math.round(sale.komisi) : 0;
         const cData = clicksByKey[tag] || null;
         const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : 0;
-        if (orders > 0 || komisi > 0 || shopeeClicks > 0) {
+        if (orders > 0 || komisi > 0) {
           rows.push({
             campaignDisplay: 'Organik / Tanpa Iklan FB',
             adSetDisplay: '-',
@@ -1327,7 +1338,7 @@ function computeMasterTableRows() {
       };
     });
 
-    const allUnbound = new Set([...Object.keys(salesByKey), ...Object.keys(clicksByKey)]);
+    const allUnbound = new Set(Object.keys(salesByKey));
     allUnbound.forEach(tag => {
       if (!boundKeys.has(tag)) {
         const sale = salesByKey[tag] || null;
@@ -1335,7 +1346,7 @@ function computeMasterTableRows() {
         const komisi = sale ? Math.round(sale.komisi) : 0;
         const cData = clicksByKey[tag] || null;
         const shopeeClicks = cData ? (cData.fromFacebook > 0 ? cData.fromFacebook : cData.total) : 0;
-        if (orders > 0 || komisi > 0 || shopeeClicks > 0) {
+        if (orders > 0 || komisi > 0) {
           rows.push({
             campaignDisplay: 'Organik / Tanpa Iklan FB',
             adSetDisplay: '-',
@@ -1645,7 +1656,9 @@ function computeProductRows() {
   const byProduct = {};
   const fbNameSet = new Set([
     ...state.filteredFb.map(c => c.campaignName),
-    ...(state.filteredFbAds || []).map(a => a.adName)
+    ...(state.filteredFbAds || []).map(a => a.adName),
+    ...(state.filteredFbAds || []).map(a => a.adSetName),
+    ...(state.filteredFbAds || []).map(a => a.campaignName)
   ].filter(Boolean));
 
   (state.filteredShopee || []).forEach(r => {
@@ -1731,7 +1744,9 @@ function renderTrendTab() {
   const byDate  = {};
   const fbNameSet = new Set([
     ...state.filteredFb.map(c => c.campaignName),
-    ...(state.filteredFbAds || []).map(a => a.adName)
+    ...(state.filteredFbAds || []).map(a => a.adName),
+    ...(state.filteredFbAds || []).map(a => a.adSetName),
+    ...(state.filteredFbAds || []).map(a => a.campaignName)
   ].filter(Boolean));
   const campaignColors = {};
   const palette = ['#6366f1','#10b981','#f97316','#3b82f6','#8b5cf6','#ef4444','#f59e0b','#06b6d4'];
